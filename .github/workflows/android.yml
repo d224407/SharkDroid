@@ -1,0 +1,178 @@
+name: Android CI
+
+on:
+  push:
+    paths-ignore:
+      - "**/*.md"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # ZygiskFrida release built into the add-on (it bundles the Frida gadget of that release: v1.9.0 -> 17.4.0).
+  ZF_REF: v1.9.0
+
+jobs:
+  # Wireshark tools (tshark, dumpcap, root helper) cross-compiled with NDK r27c from the pinned,
+  # verified sources in SOURCES.txt. Slow, so the result is cached until a build input changes.
+  wireshark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore native build
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: app-project/app/src/main/jniLibs/arm64-v8a
+          key: wireshark-native-${{ hashFiles('scripts/**', 'helper/**', 'patches/**', 'stubs/**', 'SOURCES.txt') }}
+
+      - name: Install build tools
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config python3 patch flex bison
+          pip install --break-system-packages meson
+
+      - name: Download NDK r27c
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/ndk.zip" https://dl.google.com/android/repository/android-ndk-r27c-linux.zip
+          echo "59c2f6dc96743b5daf5d1626684640b20a6bd2b1d85b13156b90333741bad5cc  $RUNNER_TEMP/ndk.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/ndk.zip" -d "$HOME/ndk"
+
+      - name: Build Wireshark for Android
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          python3 scripts/prepare-sources.py
+          NDK="$HOME/ndk/android-ndk-r27c" JOBS="$(nproc)" bash scripts/build-native.sh
+
+      # The tools reach the build job through the cache above (saved when this job ends), so no
+      # intermediate artifact is published: the APK is the only artifact of a run.
+      - name: Verify native tools
+        run: test -s app-project/app/src/main/jniLibs/arm64-v8a/libtshark.so
+
+  # Optional TLS add-on: the ZygiskFrida Magisk/KernelSU module (https://github.com/lico-n/ZygiskFrida), built from
+  # source at a pinned tag. Its build downloads and bundles the Frida gadget of that release (v1.9.0 -> Frida 17.4.0).
+  # The zip is cached per tag and ends up inside the APK, from where the app installs it on request.
+  # A failure only leaves the module out of the APK. To change the module (and Frida) version, change ZF_REF.
+  zygiskfrida:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Restore module zip
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: zygiskfrida.zip
+          key: zygiskfrida-${{ env.ZF_REF }}-1
+
+      - name: Set up JDK 17
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: Build ZygiskFrida
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "$ZF_REF" --recurse-submodules --shallow-submodules https://github.com/lico-n/ZygiskFrida.git zf
+          cd zf
+          chmod +x gradlew
+          ./gradlew :module:assembleRelease --no-daemon
+          ls -l out
+          # the Zygisk build (not the Riru one)
+          zip="$(ls out/*.zip | grep -vi riru | head -n1)"
+          [ -n "$zip" ] || { echo "no Zygisk module zip in out/" >&2; exit 1; }
+          cp "$zip" "$GITHUB_WORKSPACE/zygiskfrida.zip"
+
+      # Saved to the cache when this job ends; the build job restores it from there.
+      - name: Verify module zip
+        run: |
+          unzip -p zygiskfrida.zip module.prop | grep -q '^id='
+          unzip -l zygiskfrida.zip | grep -q 'libgadget'
+
+  build:
+    needs: [wireshark, zygiskfrida]
+    # The module is optional: build the app even when its job failed.
+    if: ${{ !cancelled() && needs.wireshark.result == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE: ${{ secrets.KEYSTORE_CONTENT != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: gradle
+
+      # The repository keeps no gradle-wrapper.jar (see README), so Gradle itself is set up here.
+      - name: Set up Gradle 9.6.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.6.0"
+
+      - name: Restore native tools
+        uses: actions/cache/restore@v4
+        with:
+          path: app-project/app/src/main/jniLibs/arm64-v8a
+          key: wireshark-native-${{ hashFiles('scripts/**', 'helper/**', 'patches/**', 'stubs/**', 'SOURCES.txt') }}
+          fail-on-cache-miss: true
+
+      # Optional TLS add-on: the key-logging script and the ZygiskFrida module zip (the app installs it on request).
+      - name: Add TLS key script
+        run: install -m 644 addon/tlskeys.js app-project/app/src/main/jniLibs/arm64-v8a/libtlskeys.so
+
+      - name: Restore ZygiskFrida module
+        id: zf
+        uses: actions/cache/restore@v4
+        with:
+          path: zygiskfrida.zip
+          key: zygiskfrida-${{ env.ZF_REF }}-1
+
+      - name: Add ZygiskFrida module to the app
+        if: steps.zf.outputs.cache-matched-key != ''
+        run: install -m 644 zygiskfrida.zip app-project/app/src/main/jniLibs/arm64-v8a/libzygiskfrida.so
+
+      - name: Prepare release keystore
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          KEYSTORE_CONTENT: ${{ secrets.KEYSTORE_CONTENT }}
+          KEYSTORE_ALIAS: ${{ secrets.KEYSTORE_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_CONTENT" | base64 -d > "$RUNNER_TEMP/release.jks"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$RUNNER_TEMP/release.jks" "$KEYSTORE_PASSWORD" "$KEYSTORE_ALIAS" "$KEYSTORE_PASSWORD" \
+            > "$RUNNER_TEMP/keystore.properties"
+          echo "SHARKDROID_KEYSTORE_PROPS=$RUNNER_TEMP/keystore.properties" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        working-directory: app-project
+        run: gradle assembleRelease
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sharkdroid
+          path: app-project/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      # An unsigned release APK cannot be installed, so releases need the signing secrets.
+      - name: Publish GitHub release (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.HAS_KEYSTORE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="build-${{ github.run_number }}-${GITHUB_SHA::7}"
+          cp app-project/app/build/outputs/apk/release/*.apk "sharkdroid-$tag.apk"
+          gh release create "$tag" "sharkdroid-$tag.apk" \
+            --target "$GITHUB_SHA" \
+            --title "$tag" \
+            --notes "$(git log -1 --pretty=%B)"
