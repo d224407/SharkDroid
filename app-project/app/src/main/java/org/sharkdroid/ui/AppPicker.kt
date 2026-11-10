@@ -35,6 +35,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
@@ -81,7 +86,8 @@ private object AppIcons {
 fun AppIcon(pkg: String, sizeDp: Int = 40) {
     val ctx = LocalContext.current
     val icon by produceState(AppIcons.cached(pkg), pkg) {
-        if (value == null) value = withContext(Dispatchers.IO) { AppIcons.load(ctx, pkg) }
+        // produceState keeps its previous value when the key changes: reset it, or the old app's icon stays.
+        value = AppIcons.cached(pkg) ?: withContext(Dispatchers.IO) { AppIcons.load(ctx, pkg) }
     }
     val shape = RoundedCornerShape((sizeDp / 4).dp)
     val img = icon
@@ -111,7 +117,16 @@ fun AppPickerSheet(onSelect: (String) -> Unit, onDismiss: () -> Unit) {
             trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Filled.Clear, stringResource(R.string.action_clear_filter)) } },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
         )
-        LazyColumn(Modifier.fillMaxWidth().height(480.dp)) {
+        // At the bottom of the list the leftover scroll and fling would drag the bottom sheet (the "jump"): eat them.
+        val keepSheet = remember {
+            object : NestedScrollConnection {
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) =
+                    if (available.y < 0f) available else Offset.Zero
+                override suspend fun onPostFling(consumed: Velocity, available: Velocity) =
+                    if (available.y < 0f) available else Velocity.Zero
+            }
+        }
+        LazyColumn(Modifier.fillMaxWidth().height(480.dp).nestedScroll(keepSheet), overscrollEffect = null) {
             typed?.let { t ->
                 item(key = "typed") {
                     ListItem(

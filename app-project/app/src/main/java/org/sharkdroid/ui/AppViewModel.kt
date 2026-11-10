@@ -225,14 +225,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app), CaptureManager.Lis
         settings.updateCaptureFilter(cf)
         // Keys of an earlier capture are of no use to a new one.
         if (ui.capture == CaptureManager.State.IDLE) TlsKeys.clearKeys()
-        // Default view: only requests / responses. Clear or edit the display filter to see every packet.
-        val df = CaptureManager.displayFilter.ifBlank { Tools.REQUEST_FILTER }
-        onFilterQuery(df)
-        // With a target app, only the packets of that app's sockets are listed.
-        val uid = settings.tlsApp?.let {
-            runCatching { ctx.packageManager.getApplicationInfo(it.substringBefore(':'), 0).uid }.getOrNull()
-        } ?: -1
-        CaptureManager.startCapture(ctx, ui.iface.name, cf, df, settings.snaplen, uid)
+        // Every packet is listed; the target app only decides whose TLS keys are collected.
+        CaptureManager.startCapture(ctx, ui.iface.name, cf, CaptureManager.displayFilter, settings.snaplen)
         refresh()
         startTlsKeys()
     }

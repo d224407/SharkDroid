@@ -14,10 +14,6 @@ object Tools {
     private val SAFE_PATH = Regex("^/[A-Za-z0-9/._~=+-]+$")
     private val SAFE_NAME = Regex("^[A-Za-z0-9._-]{1,128}$")
 
-    /** Default packet-list filter: only the requests / responses (DNS, HTTP, decrypted HTTP/2, WebSocket, TLS hello with SNI, QUIC initial). */
-    const val REQUEST_FILTER = "dns || http.request || http.response || http2.type == 0 || http2.type == 1 || websocket || " +
-        "tls.handshake.type == 1 || quic.long.packet_type == 0"
-
     fun libDir(ctx: Context): String = ctx.applicationInfo.nativeLibraryDir
     fun tshark(ctx: Context): String = File(libDir(ctx), "libtshark.so").path
     fun dumpcap(ctx: Context): String = File(libDir(ctx), "libdumpcap.so").path

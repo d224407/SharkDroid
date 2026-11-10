@@ -236,7 +236,7 @@
     <string name="decrypt_warning">包含 TLS 密钥的抓包文件可被任何拿到它的人解密。请仅与可信的人导出或分享。</string>
     <string name="target_app_title">目标应用</string>
     <string name="target_app_none">所有应用：选择一个，仅显示其流量</string>
-    <string name="target_app_help">仅列出该应用的请求与响应（通过其套接字匹配，需要 root；DNS 由系统代为解析，无法归属到应用）。同时收集 TLS 密钥以解密 HTTPS：点开始时会重启该应用（ZygiskFrida 在其启动时注入）。</string>
+    <string name="target_app_help">所有数据包仍会被记录并列出。会收集该应用的 TLS 密钥以解密其 HTTPS：点开始时会重启该应用（ZygiskFrida 在其启动时注入）。</string>
     <string name="target_app_pick_title">选择目标应用</string>
     <string name="target_app_search">搜索名称或包名</string>
     <string name="target_app_use_typed">使用“%1$s”</string>

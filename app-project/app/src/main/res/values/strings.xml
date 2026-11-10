@@ -248,7 +248,7 @@
     <string name="decrypt_warning">Captures that contain TLS keys can be decrypted by anyone who gets the file. Export or share them only with people you trust.</string>
     <string name="target_app_title">Target app</string>
     <string name="target_app_none">All apps: pick one to list only its traffic</string>
-    <string name="target_app_help">Only this app\'s requests and responses are listed (matched to its sockets, needs root; DNS is answered by the system, so it is not attributed to the app). TLS keys are collected too so HTTPS can be decrypted: the app is restarted when you press Start (ZygiskFrida injects it at launch).</string>
+    <string name="target_app_help">Every packet is still recorded and listed. The app\'s TLS keys are collected so its HTTPS can be decrypted: the app is restarted when you press Start (ZygiskFrida injects it at launch).</string>
     <string name="target_app_pick_title">Choose target app</string>
     <string name="target_app_search">Search name or package</string>
     <string name="target_app_use_typed">Use \"%1$s\"</string>

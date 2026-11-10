@@ -68,7 +68,7 @@ You don't need `setenforce 0` or any SELinux policy change: dumpcap runs in the 
 
 ## What the packet list shows
 
-A new capture starts with a display filter that keeps only requests and responses (DNS, HTTP, decrypted HTTP/2, WebSocket, the TLS client hello with the server name, QUIC initial packets). Clear or edit the display filter to see every packet. With a **Target app** chosen in the New capture sheet, only the packets of that app's sockets are listed (the root helper reads its sockets from `/proc/net`); the other traffic is still recorded in the file, but not listed. DNS is answered by the system and cannot be attributed to an app.
+Every packet is recorded and listed, with or without a Target app; the display filter starts empty. The Target app only decides whose TLS keys are collected, so only that app's HTTPS shows up decrypted (protocol `HTTP` / `HTTP2` instead of `TLS`).
 
 ## TLS decryption (optional add-on)
 
