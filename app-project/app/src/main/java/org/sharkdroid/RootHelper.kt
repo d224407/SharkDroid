@@ -64,13 +64,6 @@ object RootHelper {
         return p
     }
 
-    /** Local ports of every TCP/UDP socket owned by [uid] (helper command `socks`); null if the helper failed. */
-    fun appPorts(ctx: Context, uid: Int): Set<Int>? {
-        val r = run(ctx, "socks", listOf(uid.toString()), timeoutSec = 5)
-        if (r.exit != 0) return null
-        return r.stdout.lineSequence().mapNotNull { it.substringAfter(' ', "").trim().toIntOrNull() }.toSet()
-    }
-
     /** Follow the TLS keys the injected script writes for [pkg]; stdout carries "[TLSKEY] <key log line>" lines. */
     fun startTlsKeys(ctx: Context, pkg: String): Process {
         require(Tools.validPackage(pkg)) { "bad package name" }

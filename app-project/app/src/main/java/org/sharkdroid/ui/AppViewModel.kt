@@ -27,7 +27,6 @@ import org.sharkdroid.IfaceInfo
 import org.sharkdroid.PacketRow
 import org.sharkdroid.R
 import org.sharkdroid.RootHelper
-import org.sharkdroid.TlsDiag
 import org.sharkdroid.TlsKeys
 import org.sharkdroid.Tools
 import java.io.File
@@ -120,30 +119,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app), CaptureManager.Lis
 
     // ---------------------------------------------------------------- CaptureManager.Listener
     override fun onRowsChanged(reset: Boolean) { rowsVersion++; refresh() }
-    private var prevCapture = CaptureManager.State.IDLE
-
-    /** After a capture with a target app: how many TLS connections there were and how many could be decrypted. */
-    private fun reportTls() {
-        val app = settings.tlsApp ?: return
-        val f = CaptureManager.file ?: return
-        val ports = CaptureManager.appPorts().takeIf { it.isNotEmpty() } ?: return
-        if (!TlsKeys.ready) return
-        viewModelScope.launch {
-            val msg = withContext(Dispatchers.IO) {
-                val (hello, dec) = TlsDiag.stats(ctx, f, ports) ?: return@withContext null
-                if (hello == 0) return@withContext null
-                val head = ctx.getString(R.string.tls_stats, hello, dec)
-                if (dec > 0) head
-                else head + "\n" + ctx.getString(TlsDiag.hint(ctx, app) ?: R.string.tls_none_decrypted)
-            }
-            if (msg != null) post(msg)
-        }
-    }
 
     override fun onStateChanged() {
         val st = CaptureManager.state
-        if (st == CaptureManager.State.IDLE && prevCapture != CaptureManager.State.IDLE) reportTls()
-        prevCapture = st
         refresh()
         // The key extractor lives and dies with the capture it feeds.
         if (CaptureManager.state == CaptureManager.State.IDLE && TlsKeys.state != TlsKeys.State.IDLE) TlsKeys.stop()

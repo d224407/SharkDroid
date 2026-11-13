@@ -10,7 +10,6 @@ import android.util.Log
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
 
 data class PacketRow(
@@ -73,33 +72,9 @@ object CaptureManager {
     var endedAt: Long = 0L; private set
     private var app: Context? = null
 
-    /** A capture scoped to one app: [ports] are the local ports of that app's sockets seen so far. */
-    private class AppScope(val file: File, val uid: Int) { val ports: MutableSet<Int> = ConcurrentHashMap.newKeySet() }
-    /** A dissected packet plus its TCP/UDP ports (the app side is matched against [AppScope.ports]). */
-    private class Parsed(val row: PacketRow, val sp: Int, val dp: Int, val at: Long) {
-        /**
-         * The app's socket was seen in /proc/net, or the packet is decrypted application data: only the target
-         * app's TLS keys are collected, so decrypted HTTP / WebSocket can only be that app's. Without the second
-         * test every connection shorter than the 0.8 s /proc/net sampling (it is TIME_WAIT, uid 0, by then) is lost.
-         */
-        fun owned(scope: AppScope) = scope.ports.contains(sp) || scope.ports.contains(dp) || decrypted()
-        private fun decrypted(): Boolean {
-            val p = row.protocols
-            return p.contains(":tls") && (p.contains(":http") || p.contains(":websocket"))
-        }
-    }
-    @Volatile private var appScope: AppScope? = null
-    /** Packets seen before their socket showed up in /proc/net; released when it does (main thread only). */
-    private val pending = ArrayDeque<Parsed>()
-    private const val PENDING_MS = 6000L
-    private const val PENDING_MAX = 50_000
-
     private var suProc: Process? = null
     private var listJob: Dissector.Job? = null
     @Volatile private var generation = 0
-
-    /** Local ports of the target app's sockets seen in the current capture (empty without a target app). */
-    fun appPorts(): Set<Int> = appScope?.takeIf { it.file == file }?.ports?.toSet() ?: emptySet()
 
     fun addListener(l: Listener) { listeners += l }
     fun removeListener(l: Listener) { listeners -= l }
@@ -111,8 +86,7 @@ object CaptureManager {
 
     // ---------------------------------------------------------------- capture
 
-    /** [appUid] >= 0 lists only the packets of that app's sockets (root helper `socks`); -1 lists everything. */
-    fun startCapture(ctx: Context, ifc: String, captureFilter: String, dfilter: String, snaplen: Int = Tools.DEFAULT_SNAPLEN, appUid: Int = -1) {
+    fun startCapture(ctx: Context, ifc: String, captureFilter: String, dfilter: String, snaplen: Int = Tools.DEFAULT_SNAPLEN) {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (state != State.IDLE) return
         val app = ctx.applicationContext
@@ -122,28 +96,12 @@ object CaptureManager {
         val f = Tools.newCaptureFile(app, "cap_" + Tools.safeFileName(ifc))
         val s = Sink(f)
         sink = s; file = f; iface = ifc; displayFilter = dfilter; dumpcapLog = ""
-        pending.clear()
-        val scope = if (appUid >= 0) AppScope(f, appUid) else null
-        appScope = scope
         state = State.STARTING
         startedAt = SystemClock.elapsedRealtime(); endedAt = 0L
         fireState()
         try {
             app.startForegroundService(Intent(app, CaptureService::class.java).putExtra("iface", ifc))
         } catch (e: Exception) { Log.w(TAG, "fgs", e) }
-
-        if (scope != null) thread(name = "capture-ports") {
-            var warned = false
-            while (state != State.IDLE) {
-                val ports = RootHelper.appPorts(app, scope.uid)
-                if (ports == null) {
-                    if (!warned) { warned = true; fireMsg(R.string.msg_app_ports_failed) }
-                } else if (ports.filter { scope.ports.add(it) }.isNotEmpty()) {
-                    post { releasePending(scope) }
-                }
-                try { Thread.sleep(800) } catch (_: InterruptedException) { }
-            }
-        }
 
         thread(name = "capture-root") {
             val p = try {
@@ -248,25 +206,24 @@ object CaptureManager {
     fun clear() {
         listJob?.kill(); listJob = null
         generation++
-        rows.clear(); pending.clear(); rowsTruncated = false; dissecting = false; rowsBytes = 0L; lastRelTime = 0.0
-        if (state == State.IDLE) { file = null; sink = null; appScope = null; startedAt = 0L; endedAt = 0L }
+        rows.clear(); rowsTruncated = false; dissecting = false; rowsBytes = 0L; lastRelTime = 0.0
+        if (state == State.IDLE) { file = null; sink = null; startedAt = 0L; endedAt = 0L }
         post { listeners.toList().forEach { it.onRowsChanged(true) } }
         fireState()
     }
 
     private val FIELDS = listOf("frame.number", "frame.time_relative", "_ws.col.def_src", "_ws.col.def_dst",
         "_ws.col.protocol", "frame.len", "frame.protocols", "_ws.expert.severity", "tcp.analysis.flags",
-        "tcp.srcport", "tcp.dstport", "udp.srcport", "udp.dstport", "_ws.col.info")
+        "_ws.col.info")
 
     /** (Re)start the packet-list job. For a live capture, feed the growing file through a pipe. */
     private fun startDissection(app: Context, f: File, live: Sink?) {
         listJob?.kill(); listJob = null
         val gen = ++generation
-        rows.clear(); pending.clear(); rowsTruncated = false; dissecting = true; rowsBytes = 0L; lastRelTime = 0.0
+        rows.clear(); rowsTruncated = false; dissecting = true; rowsBytes = 0L; lastRelTime = 0.0
         listeners.toList().forEach { it.onRowsChanged(true) }
         fireState()
         val dfilter = displayFilter
-        val scope = appScope?.takeIf { it.file == f }
         thread(name = "dissect-$gen") {
             val input: ParcelFileDescriptor = if (live != null) {
                 val pipe = ParcelFileDescriptor.createPipe()
@@ -288,29 +245,22 @@ object CaptureManager {
             val errT = thread(name = "dissect-err-$gen") {
                 try { job.stderr.bufferedReader().forEachLine { if (err.length < 16384) err.append(it).append('\n') } } catch (_: Exception) { }
             }
-            var batch = ArrayList<Parsed>(256)
-            var held = ArrayList<Parsed>()
+            var batch = ArrayList<PacketRow>(256)
             var lastPost = System.currentTimeMillis()
             var count = 0
             try {
                 job.stdout.bufferedReader().forEachLine { line ->
                     if (gen != generation) throw InterruptedException()
-                    parseRow(line)?.let { p ->
-                        count++
-                        // App scope: keep packets of the app's sockets. In a live capture the others wait a few
-                        // seconds, because a new socket appears in /proc/net slightly after its first packets.
-                        if (scope == null || p.owned(scope)) batch.add(p) else if (live != null) held.add(p)
-                        Unit
-                    }
+                    parseRow(line)?.let { batch.add(it); count++ }
                     val now = System.currentTimeMillis()
-                    if (batch.size >= 2000 || ((batch.isNotEmpty() || held.isNotEmpty()) && now - lastPost > 120)) {
-                        val b = batch; val h = held; batch = ArrayList(256); held = ArrayList(); lastPost = now
-                        post { appendRows(gen, scope, b, h) }
+                    if (batch.size >= 2000 || (batch.isNotEmpty() && now - lastPost > 120)) {
+                        val b = batch; batch = ArrayList(256); lastPost = now
+                        post { appendRows(gen, b) }
                     }
                 }
             } catch (_: InterruptedException) {
             } catch (_: Exception) { }
-            if (batch.isNotEmpty() || held.isNotEmpty()) { val b = batch; val h = held; post { appendRows(gen, scope, b, h) } }
+            if (batch.isNotEmpty()) { val b = batch; post { appendRows(gen, b) } }
             errT.join(3000)
             val rc = job.waitFor()
             post {
@@ -350,36 +300,19 @@ object CaptureManager {
         }
     }
 
-    private fun appendRows(gen: Int, scope: AppScope?, b: List<Parsed>, held: List<Parsed>) {
+    private fun appendRows(gen: Int, b: List<PacketRow>) {
         if (gen != generation) return
-        var add: List<Parsed> = b
-        if (scope != null && held.isNotEmpty()) {
-            // The socket may have been seen after the dissection thread looked: re-check on the main thread.
-            val late = held.filter { it.owned(scope) }
-            if (late.isNotEmpty()) add = (b + late).sortedBy { it.row.num }
-            val now = System.currentTimeMillis()
-            for (h in held) if (!h.owned(scope)) pending.addLast(h)
-            while (pending.isNotEmpty() && (now - pending.first().at > PENDING_MS || pending.size > PENDING_MAX)) pending.removeFirst()
-        }
-        insertRows(add)
+        insertRows(b)
     }
 
-    /** Move packets whose socket just became known from the waiting list into the packet list. */
-    private fun releasePending(scope: AppScope) {
-        if (appScope !== scope || pending.isEmpty()) return
-        val hit = ArrayList<Parsed>()
-        pending.removeAll { if (it.owned(scope)) { hit += it; true } else false }
-        insertRows(hit)
-    }
-
-    /** Add rows keeping the list ordered by frame number (released packets are slightly older than the tail). */
-    private fun insertRows(add: List<Parsed>) {
+    /** Add rows keeping the list ordered by frame number. */
+    private fun insertRows(add: List<PacketRow>) {
         if (add.isEmpty()) return
         val room = MAX_ROWS - rows.size
         if (room <= 0) { rowsTruncated = true; return }
         val use = if (add.size > room) { rowsTruncated = true; add.subList(0, room) } else add
         for (p in use) {
-            val r = p.row
+            val r = p
             if (rows.isEmpty() || rows.last().num < r.num) rows.add(r)
             else {
                 var lo = 0; var hi = rows.size
@@ -393,15 +326,12 @@ object CaptureManager {
         listeners.toList().forEach { it.onRowsChanged(false) }
     }
 
-    private fun parseRow(line: String): Parsed? {
-        val f = line.split('\t', limit = 14)
-        if (f.size < 14) return null
+    private fun parseRow(line: String): PacketRow? {
+        val f = line.split('\t', limit = 10)
+        if (f.size < 10) return null
         val num = f[0].toIntOrNull() ?: return null
         val t = f[1].let { s -> val dot = s.indexOf('.'); if (dot >= 0 && s.length > dot + 7) s.substring(0, dot + 7) else s }
-        val row = PacketRow(num, t, f[2], f[3], f[4], f[5].toIntOrNull() ?: 0, f[13], f[6],
+        return PacketRow(num, t, f[2], f[3], f[4], f[5].toIntOrNull() ?: 0, f[9], f[6],
             f[7].toIntOrNull() ?: 0, f[8].isNotEmpty(), f[1].toDoubleOrNull() ?: 0.0)
-        val sp = f[9].toIntOrNull() ?: f[11].toIntOrNull() ?: -1
-        val dp = f[10].toIntOrNull() ?: f[12].toIntOrNull() ?: -1
-        return Parsed(row, sp, dp, System.currentTimeMillis())
     }
 }

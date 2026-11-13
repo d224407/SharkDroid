@@ -109,12 +109,12 @@ private fun sizeLabel(b: Long) = when {
 /** HTTP objects of the current capture, grouped by type; tap one to view it. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ResourcesScreen(capture: File?, ports: Set<Int>, onBack: () -> Unit) {
+fun ResourcesScreen(capture: File?, onBack: () -> Unit) {
     val ctx = LocalContext.current
     var items by remember { mutableStateOf<List<Resources.Item>?>(null) }
     LaunchedEffect(capture) {
         items = if (capture == null || !Tools.isCaptureFile(ctx, capture)) emptyList()
-        else withContext(Dispatchers.IO) { Resources.extract(ctx, capture, ports) }
+        else withContext(Dispatchers.IO) { Resources.extract(ctx, capture) }
     }
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
     var open by remember { mutableStateOf<Resources.Item?>(null) }

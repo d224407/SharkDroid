@@ -175,7 +175,7 @@ fun SharkApp(vm: AppViewModel) {
                 onApplyFilter = { f -> vm.onFilterQuery(f); vm.applyFilter(f); nav.popBackStack("main", false) },
                 onFollow = { proto, id ->
                     if (file != null) {
-                        report = ReportRequest(ctx.getString(if (proto == "tcp") R.string.follow_tcp_title else R.string.follow_udp_title, id),
+                        report = ReportRequest(ctx.getString(when (proto) { "tcp" -> R.string.follow_tcp_title; "tls" -> R.string.follow_tls_title; else -> R.string.follow_udp_title }, id),
                             listOf("-q", "-z", "follow,$proto,ascii,$id"), file)
                         nav.navigate("report")
                     }
@@ -193,7 +193,7 @@ fun SharkApp(vm: AppViewModel) {
                 onDelete = { f -> if (!vm.deleteFile(f)) vm.postRes(R.string.msg_cannot_delete_live); version++ })
         }
         composable("resources") {
-            ResourcesScreen(CaptureManager.file, CaptureManager.appPorts(), onBack = { nav.popBackStack() })
+            ResourcesScreen(CaptureManager.file, onBack = { nav.popBackStack() })
         }
         composable("stats") {
             val counts = remember(vm.rowsVersion) {

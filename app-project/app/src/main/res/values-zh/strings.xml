@@ -240,9 +240,6 @@
     <string name="target_app_pick_title">选择目标应用</string>
     <string name="target_app_search">搜索名称或包名</string>
     <string name="target_app_use_typed">使用“%1$s”</string>
-    <string name="msg_app_ports_failed">无法读取该应用的套接字，因此无法按应用过滤流量</string>
-    <string name="tls_stats">TLS：%1$d 个连接，%2$d 个已解密</string>
-    <string name="tls_none_decrypted">没有任何内容能被解密：该应用可能使用了钩子无法触及的 TLS 库，或使用 QUIC。</string>
     <string name="tls_hint_flutter">该应用使用 Flutter：其 TLS 库内置且被隐藏，很可能无法获取密钥。</string>
     <string name="tls_hint_cronet">该应用内置 Chromium / Cronet 网络栈（静态 BoringSSL）：很可能无法获取密钥。</string>
     <string name="tls_hint_go">该应用包含自带 TLS 的 Go 运行时：此钩子无法获取密钥。</string>

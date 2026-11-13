@@ -15,9 +15,6 @@
  *                               -> fork/exec dumpcap -i IF [-f FILTER] -s N -w - -n -q
  *                                  pcapng goes to stdout; the capture is stopped with
  *                                  SIGTERM when stdin reaches EOF or a 'q' byte arrives.
- *   socks <uid>                 -> prints "T <port>" / "U <port>" (decimal local port) for every TCP/UDP
- *                                  socket owned by <uid>, read from the fixed files /proc/net/{tcp,tcp6,
- *                                  udp,udp6}. Lets the app tell which captured packets belong to one app.
  *   ZygiskFrida TLS add-on (optional; needs the ZygiskFrida Magisk/KernelSU module, which provides the
  *   frida gadget and injects it into the chosen app when that app starts):
  *   zfcheck                     -> exit 0 if the module's gadget exists in /data/local/tmp/re.zyg.fri
@@ -245,33 +242,6 @@ static int cmd_capture(char **tok, int ntok) {
     return 128 + (WIFSIGNALED(status) ? WTERMSIG(status) : 0);
 }
 
-/* "socks <uid>": local ports of all TCP/UDP sockets owned by <uid> (fixed /proc/net files only). */
-static int cmd_socks(char **tok, int ntok) {
-    if (ntok != 3) die("socks: bad argument count");
-    const char *a = tok[2];
-    size_t n = strlen(a);
-    if (n == 0 || n > 10) die("socks: invalid uid");
-    for (size_t i = 0; i < n; i++) if (a[i] < '0' || a[i] > '9') die("socks: invalid uid");
-    unsigned long want = strtoul(a, NULL, 10);
-    static const struct { const char *path; char tag; } files[] = {
-        { "/proc/net/tcp", 'T' }, { "/proc/net/tcp6", 'T' }, { "/proc/net/udp", 'U' }, { "/proc/net/udp6", 'U' },
-    };
-    for (size_t f = 0; f < sizeof files / sizeof files[0]; f++) {
-        FILE *fp = fopen(files[f].path, "re");
-        if (!fp) continue;
-        char line[512];
-        if (!fgets(line, sizeof line, fp)) { fclose(fp); continue; } /* header */
-        while (fgets(line, sizeof line, fp)) {
-            unsigned lport = 0; unsigned long uid = 0;
-            /* sl: local rem st tx:rx tr:tm->when retrnsmt uid ... */
-            if (sscanf(line, " %*d: %*[0-9A-Fa-f]:%x %*[0-9A-Fa-f]:%*x %*x %*x:%*x %*x:%*x %*x %lu", &lport, &uid) == 2 && uid == want)
-                printf("%c %u\n", files[f].tag, lport);
-        }
-        fclose(fp);
-    }
-    return 0;
-}
-
 #define ZF_DIR        "/data/local/tmp/re.zyg.fri"
 #define ZF_GADGET     ZF_DIR "/libgadget.so"
 #define ZF_OWN_GADGET ZF_DIR "/libsharkdroid.so"
@@ -387,7 +357,10 @@ static int cmd_zfrestart(char **tok, int ntok) {
     char *stop[] = { "/system/bin/am", "force-stop", pkg, NULL };
     run_quiet(stop);
     usleep(500000);
-    char *start[] = { "/system/bin/monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1", NULL };
+    /* "am" is a shell wrapper around the native "cmd" binary, so it works with our cleared environment
+     * (monkey would need app_process, which needs the Android runtime environment variables). */
+    char *start[] = { "/system/bin/am", "start", "-a", "android.intent.action.MAIN",
+                      "-c", "android.intent.category.LAUNCHER", "-p", pkg, NULL };
     run_quiet(start);
     return 0;
 }
@@ -570,7 +543,6 @@ int main(void) {
         return 127;
     }
     if (strcmp(cmd, "capture") == 0) return cmd_capture(tok, ntok);
-    if (strcmp(cmd, "socks") == 0) return cmd_socks(tok, ntok);
     if (strcmp(cmd, "tlskeys") == 0) return cmd_tlskeys(tok, ntok);
     if (strcmp(cmd, "zfcheck") == 0) return cmd_zfcheck();
     if (strcmp(cmd, "zfprep") == 0) return cmd_zfprep(tok, ntok);

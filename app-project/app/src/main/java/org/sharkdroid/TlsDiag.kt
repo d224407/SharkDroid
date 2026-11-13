@@ -1,7 +1,6 @@
 package org.sharkdroid
 
 import android.content.Context
-import java.io.File
 import java.util.zip.ZipFile
 
 /** Tells whether an app's TLS can be decrypted: static look at its native libraries, plus counts from a capture. */
@@ -30,18 +29,4 @@ object TlsDiag {
             }
         }.distinct()
     } catch (_: Exception) { emptyList() }
-
-    /** (TLS connections with a ClientHello, connections with decrypted data) among the packets on [ports]; null on failure. */
-    fun stats(ctx: Context, capture: File, ports: Set<Int>): Pair<Int, Int>? {
-        val scope = "tcp.port in {" + ports.take(4000).joinToString(" ") + "}"
-        fun streams(y: String): Int? {
-            val (rc, out, _) = Dissector.runOnFile(ctx, capture, listOf("-Y", "($y) && $scope", "-T", "fields", "-e", "tcp.stream"))
-            if (rc != 0) return null
-            return out.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toSet().size
-        }
-        val hello = streams("tls.handshake.type == 1") ?: return null
-        // Matches only records tshark actually decrypted (same test as DecryptExport).
-        val decrypted = streams("tls.record.content_type == 23") ?: 0
-        return hello to decrypted
-    }
 }

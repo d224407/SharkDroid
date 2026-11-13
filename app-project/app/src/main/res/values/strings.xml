@@ -252,9 +252,6 @@
     <string name="target_app_pick_title">Choose target app</string>
     <string name="target_app_search">Search name or package</string>
     <string name="target_app_use_typed">Use \"%1$s\"</string>
-    <string name="msg_app_ports_failed">Could not read the app\'s sockets, so its traffic cannot be filtered</string>
-    <string name="tls_stats">TLS: %1$d connection(s), %2$d decrypted</string>
-    <string name="tls_none_decrypted">Nothing could be decrypted: the app may use a TLS library the hook does not reach, or QUIC.</string>
     <string name="tls_hint_flutter">This app uses Flutter: its TLS library is built in and hidden, so keys most likely cannot be obtained.</string>
     <string name="tls_hint_cronet">This app embeds Chromium / Cronet networking (static BoringSSL): keys most likely cannot be obtained.</string>
     <string name="tls_hint_go">This app contains a Go runtime with its own TLS: keys cannot be obtained with this hook.</string>

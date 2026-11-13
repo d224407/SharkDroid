@@ -32,21 +32,17 @@ object Resources {
         fun end(meta: Array<String>, bodies: List<File>)
     }
 
-    /** With [ports] (the target app's sockets) only packets on those ports are used. */
-    fun extract(ctx: Context, capture: File, ports: Set<Int>): List<Item> {
+    fun extract(ctx: Context, capture: File): List<Item> {
         val dir = File(ctx.cacheDir, "resources")
         dir.deleteRecursively()
         dir.mkdirs()
-        // The app's sockets, or any decrypted TLS: the keys are the target app's only, and short connections (most
-        // image / CDN fetches) are gone from /proc/net before the sampler sees them, so ports alone lose them.
-        val scope = if (ports.isEmpty()) "" else " && (tls || tcp.port in {" + ports.take(4000).joinToString(" ") + "})"
         val items = ArrayList<Item>()
         // HTTP/1: one line per request / response.
-        run(ctx, capture, "(http.request || http.response)$scope",
+        run(ctx, capture, "(http.request || http.response)",
             listOf("-E", "occurrence=f", "-e", "frame.number", "-e", "http.response.code", "-e", "http.request_in",
                 "-e", "http.request.uri", "-e", "http.host", "-e", "http.file_data"), 5, http1(dir, items))
         // HTTP/2: request headers (to name the files) and completed response bodies.
-        run(ctx, capture, "(http2.headers.path || http2.body.reassembled.data)$scope",
+        run(ctx, capture, "(http2.headers.path || http2.body.reassembled.data)",
             listOf("-e", "frame.number", "-e", "tcp.stream", "-e", "http2.type", "-e", "http2.streamid",
                 "-e", "http2.headers.path", "-e", "http2.headers.authority", "-e", "http2.body.reassembled.data"), 6, http2(dir, items))
         return items.sortedWith(compareBy({ it.kind.ordinal }, { it.name.lowercase() }))

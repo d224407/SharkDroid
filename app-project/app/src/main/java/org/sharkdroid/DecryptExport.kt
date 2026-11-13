@@ -6,8 +6,9 @@ import java.io.OutputStream
 
 /** "Output" of the TLS add-on: every TLS stream tshark could decrypt, as one text file. */
 object DecryptExport {
-    /** Matches only records tshark actually decrypted (undecrypted application data does not match). */
-    private const val DECRYPTED = "tls.record.content_type == 23"
+    /** Matches only records tshark actually decrypted: the sequence number is added only after decryption
+     *  (tls.record.content_type is on every TLS 1.2 record, decrypted or not). */
+    private const val DECRYPTED = "tls.record.sequence_number"
 
     private fun streamIds(ctx: Context, capture: File, field: String): List<Int>? {
         val (rc, out, _) = Dissector.runOnFile(ctx, capture, listOf("-Y", DECRYPTED, "-T", "fields", "-e", field))

@@ -48,7 +48,21 @@ object TlsKeys {
         val app = ctx.applicationContext
         thread(name = "tlsprobe") {
             ready = Tools.tlsScript(app).isFile && RootHelper.run(app, "zfcheck", timeoutSec = 10).exit == 0
+            if (ready && state == State.IDLE) runCatching { removeStaleEntries(app) }
         }
+    }
+
+    /** An entry of ours left in the module's config (SharkDroid was killed mid-capture) would keep injecting the app. */
+    private fun removeStaleEntries(ctx: Context) {
+        val r = RootHelper.run(ctx, "zfconfig")
+        if (r.exit != 0) return
+        val root = try { JSONObject(r.stdout.ifBlank { "{}" }) } catch (_: Exception) { return }
+        val old = root.optJSONArray("targets") ?: return
+        val kept = JSONArray()
+        for (i in 0 until old.length()) { val t = old.optJSONObject(i) ?: continue; if (!isOurs(t)) kept.put(t) }
+        if (kept.length() == old.length()) return
+        root.put("targets", kept)
+        RootHelper.run(ctx, "zfsetconfig", listOf(root.toString()))
     }
 
     private fun helperError(r: RootHelper.Result) = r.stderr.trim().lineSequence().firstOrNull().orEmpty().ifEmpty { "exit ${r.exit}" }
