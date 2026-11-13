@@ -145,7 +145,7 @@
     <string name="rep_sni">TLS server names (SNI)</string>
     <string name="rep_sni_d">Which hosts TLS connections were made to</string>
     <string name="rep_http">HTTP requests</string>
-    <string name="rep_http_d">Plain-text HTTP requests by host and URI</string>
+    <string name="rep_http_d">HTTP/1 and HTTP/2 requests (HTTPS only when TLS is decrypted)</string>
     <string name="rep_dns_stats">DNS statistics</string>
     <string name="rep_dns_stats_d">Query types, response codes and timings</string>
     <string name="rep_io">I/O per second</string>

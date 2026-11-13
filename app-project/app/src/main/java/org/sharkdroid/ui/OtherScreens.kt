@@ -281,7 +281,8 @@ val REPORTS = listOf(
         "-e", "frame.number", "-e", "frame.time_relative", "-e", "ip.src", "-e", "dns.qry.name")),
     Report(R.string.rep_sni, R.string.rep_sni_d, Icons.Outlined.Lock, listOf("-Y", "tls.handshake.extensions_server_name", "-T", "fields", "-E", "separator=/t",
         "-e", "frame.number", "-e", "ip.dst", "-e", "ipv6.dst", "-e", "tls.handshake.extensions_server_name")),
-    Report(R.string.rep_http, R.string.rep_http_d, Icons.Outlined.Http, listOf("-q", "-z", "http_req,tree")),
+    Report(R.string.rep_http, R.string.rep_http_d, Icons.Outlined.Http, listOf("-Y", "http.request || http2.headers.path", "-T", "fields", "-E", "separator=/t", "-E", "occurrence=f",
+        "-e", "frame.number", "-e", "http.request.method", "-e", "http2.headers.method", "-e", "http.host", "-e", "http2.headers.authority", "-e", "http.request.uri", "-e", "http2.headers.path")),
     Report(R.string.rep_dns_stats, R.string.rep_dns_stats_d, Icons.Outlined.QueryStats, listOf("-q", "-z", "dns,tree")),
     Report(R.string.rep_io, R.string.rep_io_d, Icons.Outlined.Timeline, listOf("-q", "-z", "io,stat,1")),
 )
