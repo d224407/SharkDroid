@@ -146,6 +146,7 @@ object CaptureManager {
             TlsKeys.detach(inj)
             try { p.waitFor() } catch (_: Exception) { }
             errT.join(2000)
+            DsbInjector.hoist(f)
             s.finish()
             suProc = null
             val log = synchronized(errBuf) { errBuf.toString() }

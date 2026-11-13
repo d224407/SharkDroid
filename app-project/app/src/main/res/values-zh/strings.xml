@@ -137,7 +137,7 @@
     <string name="rep_sni">TLS 服务器名 (SNI)</string>
     <string name="rep_sni_d">TLS 连接的目标主机</string>
     <string name="rep_http">HTTP 请求</string>
-    <string name="rep_http_d">按主机和 URI 统计的明文 HTTP 请求</string>
+    <string name="rep_http_d">HTTP/1 &amp; HTTP/2 请求（HTTPS 需已解密 TLS）</string>
     <string name="rep_dns_stats">DNS 统计</string>
     <string name="rep_dns_stats_d">查询类型、响应码和耗时</string>
     <string name="rep_io">IO 统计（每秒）</string>

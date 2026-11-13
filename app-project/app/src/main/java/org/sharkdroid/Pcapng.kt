@@ -1,5 +1,8 @@
 package org.sharkdroid
 
+import java.io.DataInputStream
+import java.io.EOFException
+import java.io.File
 import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -93,6 +96,59 @@ class DsbInjector {
         private fun u32(b: ByteArray, off: Int): Long =
             (b[off].toLong() and 0xff) or ((b[off + 1].toLong() and 0xff) shl 8) or
                 ((b[off + 2].toLong() and 0xff) shl 16) or ((b[off + 3].toLong() and 0xff) shl 24)
+
+
+        /**
+         * TLS 1.3 needs the handshake secrets before the ServerHello is dissected, but live keys land in the file
+         * some packets after the handshake, so tshark never decrypts those connections. Once the capture is
+         * finished, move every key to one DSB right after the first interface block (all packets come after it).
+         */
+        fun hoist(f: File): Boolean {
+            val tmp = File(f.parentFile, f.name + ".hoist")
+            try {
+                val lines = LinkedHashSet<String>()
+                var first = true
+                DataInputStream(f.inputStream().buffered(1 shl 16)).use { inp ->
+                    while (true) {
+                        val b = readBlock(inp) ?: break
+                        if (first) { first = false; if (u32(b, 0) != SHB || u32(b, 8) != 0x1A2B3C4DL) return false }
+                        if (u32(b, 0) == DSB_TYPE.toLong() && b.size >= 20 && u32(b, 8) == SECRETS_TLS.toLong()) {
+                            val len = u32(b, 12).toInt()
+                            if (len >= 0 && 16 + len <= b.size) String(b, 16, len, Charsets.US_ASCII).lineSequence().filter { it.isNotBlank() }.forEach { lines.add(it) }
+                        }
+                    }
+                }
+                if (lines.isEmpty()) return false
+                var done = false
+                DataInputStream(f.inputStream().buffered(1 shl 16)).use { inp ->
+                    tmp.outputStream().buffered(1 shl 16).use { out ->
+                        while (true) {
+                            val b = readBlock(inp) ?: break
+                            if (u32(b, 0) == DSB_TYPE.toLong()) continue
+                            out.write(b)
+                            if (!done && u32(b, 0) == IDB) {
+                                out.write(buildDsb(lines.joinToString("\n", postfix = "\n").toByteArray(Charsets.US_ASCII)))
+                                done = true
+                            }
+                        }
+                    }
+                }
+                if (!done) { tmp.delete(); return false }
+                return tmp.renameTo(f)
+            } catch (e: Exception) { tmp.delete(); return false }
+        }
+
+        /** One whole block (header, body, trailer) or null at end of file / on a truncated last block. */
+        private fun readBlock(inp: DataInputStream): ByteArray? {
+            val h = ByteArray(8)
+            try { inp.readFully(h) } catch (_: EOFException) { return null }
+            val total = u32(h, 4)
+            if (total < 12 || total > MAX_BLOCK || total % 4L != 0L) return null
+            val b = ByteArray(total.toInt())
+            System.arraycopy(h, 0, b, 0, 8)
+            try { inp.readFully(b, 8, b.size - 8) } catch (_: EOFException) { return null }
+            return b
+        }
 
         /** Decryption Secrets Block, little-endian, with TLS key log lines as [secrets]. */
         fun buildDsb(secrets: ByteArray): ByteArray {
