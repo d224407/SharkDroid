@@ -116,7 +116,7 @@ The binaries only depend on the system `libc.so`; everything else is statically 
 
 - **Monitor mode** is not supported. Phone Wi-Fi chips use vendor drivers that don't offer standard nl80211 monitor mode. Our libpcap is built without libnl and the app never touches driver parameters. Vendor-specific tricks such as `echo 4 > /sys/module/wlan/parameters/con_mode` disconnect Wi-Fi and may need a reboot to recover; they are untested and not recommended. `wlan0` therefore shows the Ethernet frames the phone itself sends and receives, not over-the-air 802.11 frames.
 - **Cellular interfaces**: `rmnet_data*` are raw-IP interfaces (ARPHRD_RAWIP). A libpcap patch makes them open as DLT_RAW so BPF filters and dissection are correct. The code has been reviewed, but the emulator has no rmnet device, so it **has not been run on a real cellular connection yet**. If you hit a problem, use the `any` interface instead (cooked format, dissects fine and includes the direction).
-- **Encrypted TLS/QUIC** traffic: you see the handshake (SNI, certificates, …) but not the content, unless the optional [TLS decryption add-on](#tls-decryption-optional-add-on) supplied the session keys (it only works for apps whose TLS library exports the symbols it hooks; QUIC is not covered). GnuTLS, Kerberos, Lua, nghttp2, zstd, lz4, brotli and snappy are not built in, so the matching decryption, decompression and Lua plugin features are unavailable.
+- **Encrypted TLS/QUIC** traffic: you see the handshake (SNI, certificates, …) but not the content, unless the optional [TLS decryption add-on](#tls-decryption-optional-add-on) supplied the session keys (it only works for apps whose TLS library exports the symbols it hooks; QUIC is not covered). GnuTLS, Kerberos, Lua, nghttp3, zstd, lz4, brotli and snappy are not built in, so the matching decryption, decompression and Lua plugin features are unavailable.
 - There is no Qt GUI and no graphical statistics such as I/O graphs. Statistics reports are shown as tshark text.
 - Packet details come from a single pass that reads up to that packet, so links to later packets ("[Response in: N]") may be missing. Changing the display filter during a live capture re-dissects the whole file.
 - The list shows up to 1,000,000 rows; export larger captures to a computer.
@@ -125,11 +125,11 @@ The binaries only depend on the system `libc.so`; everything else is statically 
 
 ## Security design
 
-- **Sources**: everything comes from official upstreams only: wireshark.org, tcpdump.org, download.gnome.org, gnupg.org, official GitHub releases (c-ares, PCRE2, libffi) and Google's official NDK. All versions are pinned.
+- **Sources**: everything comes from official upstreams only: wireshark.org, tcpdump.org, download.gnome.org, gnupg.org, official GitHub releases (c-ares, PCRE2, libffi, nghttp2) and Google's official NDK. All versions are pinned.
   - GPG signatures are verified where published (Wireshark, libpcap, libgcrypt, libgpg-error, c-ares, PCRE2).
   - GNOME tarballs are checked against the official sha256sum files.
   - The NDK is checked against the SHA1 in Google's repository manifest.
-  - libffi publishes no signatures, so only its SHA256 is pinned.
+  - libffi publishes no signatures, so only its SHA256 is pinned; nghttp2 is SHA256-pinned too.
   - No third-party prebuilt binaries (not even Termux packages) are used; every dependency is built from source. See `SOURCES.txt`.
 - **Minimal permissions**: no INTERNET permission. The app never goes online and has no analytics, telemetry or ads. tshark always runs with `-n` (no reverse DNS). Requested permissions:
   - `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_SPECIAL_USE`, to keep a capture running

@@ -112,7 +112,7 @@ sh ws.sh tshark -n -i rmnet_data0 -f "udp port 53"         # tshark 直接抓包
 
 - **监听模式**：不支持。手机的 Wi‑Fi 芯片使用厂商驱动，不提供标准的 nl80211 监听模式。我们编译的 libpcap 不带 libnl，App 也不会修改驱动参数。网上有 `echo 4 > /sys/module/wlan/parameters/con_mode` 这类厂商私有方法，但会断开 Wi‑Fi，可能要重启才能恢复，我们没有测试过，也不推荐。所以 `wlan0` 抓到的是本机自己收发的以太网帧，不是空口的 802.11 帧。
 - **蜂窝接口**：`rmnet_data*` 是原始 IP 接口（ARPHRD_RAWIP）。我们给 libpcap 打了补丁，让它按 DLT_RAW 打开，这样 BPF 过滤器和解析都是正确的。这部分代码审查过，但模拟器里没有 rmnet 设备，所以**还没有在真实的蜂窝网络上运行过**。遇到问题时可以改用 `any` 接口（cooked 格式，同样能正常解析，还带方向信息）。
-- **加密的 TLS/QUIC 流量**：只能看到握手信息（SNI、证书等），看不到内容；除非可选的 [TLS 解密附加组件](#tls-解密可选附加组件)提供了会话密钥（仅适用于 TLS 库导出所需符号的 App，不覆盖 QUIC）。没有编进 GnuTLS、Kerberos、Lua、nghttp2、zstd、lz4、brotli、snappy，所以相应的解密、解压和 Lua 插件功能不可用。
+- **加密的 TLS/QUIC 流量**：只能看到握手信息（SNI、证书等），看不到内容；除非可选的 [TLS 解密附加组件](#tls-解密可选附加组件)提供了会话密钥（仅适用于 TLS 库导出所需符号的 App，不覆盖 QUIC）。没有编进 GnuTLS、Kerberos、Lua、nghttp3、zstd、lz4、brotli、snappy，所以相应的解密、解压和 Lua 插件功能不可用。
 - 没有 Qt 图形界面，也没有 IO 图表这类图形化统计，统计报告以 tshark 文本形式显示。
 - 包详情是单遍解析（只读到该包为止），所以“[Response in: N]”这类指向后面包的链接可能缺失。实时抓包时修改显示过滤器会从头重新解析整个文件。
 - 列表最多显示 100 万行，更大的抓包请导出到电脑上分析。
@@ -121,11 +121,11 @@ sh ws.sh tshark -n -i rmnet_data0 -f "udp port 53"         # tshark 直接抓包
 
 ## 安全设计
 
-- **源码来源**：全部只从官方上游获取：wireshark.org、tcpdump.org、download.gnome.org、gnupg.org、GitHub 官方 release（c-ares、PCRE2、libffi），以及 Google 官方 NDK。所有版本都是固定的。
+- **源码来源**：全部只从官方上游获取：wireshark.org、tcpdump.org、download.gnome.org、gnupg.org、GitHub 官方 release（c-ares、PCRE2、libffi、nghttp2），以及 Google 官方 NDK。所有版本都是固定的。
   - 有 GPG 签名的都验证了签名（Wireshark、libpcap、libgcrypt、libgpg-error、c-ares、PCRE2）。
   - GNOME 的包对照了官方的 sha256sum 文件。
   - NDK 对照了 Google 仓库清单里的 SHA1。
-  - libffi 上游不发布签名，只固定了 SHA256。
+  - libffi 上游不发布签名，只固定了 SHA256；nghttp2 同样只固定 SHA256。
   - 没有使用任何第三方预编译二进制（Termux 的包也没有用），所有依赖都从源码编译。详见 `SOURCES.txt`。
 - **最少权限**：没有 INTERNET 权限，App 完全不联网，没有统计、遥测或广告。tshark 一律带 `-n` 运行，不做 DNS 反查。申请的权限只有：
   - `FOREGROUND_SERVICE` 和 `FOREGROUND_SERVICE_SPECIAL_USE`，用来让抓包保持运行

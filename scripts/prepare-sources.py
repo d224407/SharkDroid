@@ -16,8 +16,8 @@ def manifest():
     urls = dict(re.findall(r"^(\S+\.tar\.(?:xz|gz|bz2))\s+(https://\S+)", text, re.M))
     hashes = {name: digest for digest, name in
               re.findall(r"^([0-9a-f]{64})\s+(\S+)$", text, re.M)}
-    if len(urls) != 9 or any(name not in hashes for name in urls):
-        raise ValueError("Expected nine source archives with HTTPS URLs and SHA256 pins")
+    if len(urls) != 10 or any(name not in hashes for name in urls):
+        raise ValueError("Expected ten source archives with HTTPS URLs and SHA256 pins")
     return [(name, url, hashes[name]) for name, url in urls.items()]
 
 

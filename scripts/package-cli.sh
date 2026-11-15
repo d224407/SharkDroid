@@ -20,6 +20,7 @@ cp $ROOT/src/c-ares-1.34.8/LICENSE.md $STAGE/licenses/c-ares-LICENSE.md
 cp $ROOT/src/pcre2-10.49/LICENCE.md $STAGE/licenses/pcre2-LICENCE.md 2>/dev/null || cp $ROOT/src/pcre2-10.49/LICENCE $STAGE/licenses/pcre2-LICENCE
 cp $ROOT/src/libxml2-2.15.4/Copyright $STAGE/licenses/libxml2-Copyright
 cp $ROOT/src/libffi-3.8.0/LICENSE $STAGE/licenses/libffi-LICENSE
+cp $ROOT/src/nghttp2-1.71.0/COPYING $STAGE/licenses/nghttp2-COPYING
 cp $ROOT/patches/*.patch $STAGE/patches/
 cp "$ROOT/SOURCES.txt" "$STAGE/"
 cat > $STAGE/ws.sh <<'SH'
