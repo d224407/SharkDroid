@@ -505,6 +505,7 @@ val COMPONENTS = listOf(
     Component("libxml2", "2.15.4", "MIT", "libxml2.txt"),
     Component("libffi", "3.8.0", "MIT", "libffi.txt"),
     Component("nghttp2", "1.71.0", "MIT", "nghttp2.txt"),
+    Component("nghttp3", "1.19.0", "MIT", "nghttp3.txt"),
     Component("Frida gadget (inside the optional ZygiskFrida module)", "", "wxWindows Library Licence 3.1", "frida.txt"),
     Component("AndroidX, Jetpack Compose, Material Icons, Kotlin", "", "Apache-2.0", "Apache-2.0.txt"),
 )

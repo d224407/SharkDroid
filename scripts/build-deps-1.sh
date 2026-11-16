@@ -21,6 +21,11 @@ cmake -S nghttp2-1.71.0 -B build-nghttp2 -G Ninja -DCMAKE_TOOLCHAIN_FILE=$NDK/bu
   -DCMAKE_INSTALL_PREFIX=$PREFIX -DCMAKE_BUILD_TYPE=Release -DENABLE_LIB_ONLY=ON -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DENABLE_DOC=OFF -DBUILD_TESTING=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON >/dev/null
 ninja -C build-nghttp2 install >/dev/null
 echo "nghttp2 OK"
+# nghttp3 (cmake, library only; HTTP/3 QPACK for tshark)
+cmake -S nghttp3-1.19.0 -B build-nghttp3 -G Ninja -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-$API \
+  -DCMAKE_INSTALL_PREFIX=$PREFIX -DCMAKE_BUILD_TYPE=Release -DENABLE_LIB_ONLY=ON -DENABLE_SHARED_LIB=OFF -DENABLE_STATIC_LIB=ON -DBUILD_TESTING=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON >/dev/null
+ninja -C build-nghttp3 install >/dev/null
+echo "nghttp3 OK"
 # libgpg-error
 (cd libgpg-error-1.61 && cp -f src/syscfg/lock-obj-pub.aarch64-unknown-linux-androideabi.h src/syscfg/lock-obj-pub.linux-android.h && ./configure --host=$TARGET --prefix=$PREFIX --disable-shared --enable-static --disable-doc --disable-tests --disable-nls --disable-languages --enable-install-gpg-error-config >/dev/null && make -j$JOBS >/dev/null && make install >/dev/null)
 echo "gpg-error OK"
