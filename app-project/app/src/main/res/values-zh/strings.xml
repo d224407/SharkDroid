@@ -166,8 +166,7 @@
     <string name="chromium_checking">正在检查 root 和 resetprop…</string>
     <string name="chromium_ready">可用：root 正常，已找到 resetprop</string>
     <string name="chromium_no_root">不可用：root 权限被拒绝</string>
-    <string name="chromium_no_resetprop">不可用：没有 resetprop（Magisk、KernelSU、APatch），也没有 /data/local/tmp/mprop2</string>
-    <string name="chromium_needs_permissive">已找到 mprop2，但 SELinux 为 enforcing：请先执行 setenforce 0</string>
+    <string name="chromium_no_resetprop">不可用：没有 resetprop（Magisk、KernelSU、APatch）</string>
     <string name="settings_update">检查更新</string>
     <string name="update_d">向 GitHub 查询最新版本（仅在点击时联网）</string>
     <string name="update_checking">正在检查…</string>

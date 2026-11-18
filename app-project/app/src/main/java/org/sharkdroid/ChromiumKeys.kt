@@ -13,7 +13,7 @@ import kotlin.concurrent.thread
  * into the target app's cache, the file the TLS add-on already follows. Everything is put back when the capture ends.
  */
 object ChromiumKeys {
-    enum class Check { UNKNOWN, CHECKING, READY, NO_ROOT, NO_RESETPROP, NEEDS_PERMISSIVE }
+    enum class Check { UNKNOWN, CHECKING, READY, NO_ROOT, NO_RESETPROP }
 
     var enabled by mutableStateOf(false); private set
     var check by mutableStateOf(Check.UNKNOWN); private set
@@ -34,7 +34,7 @@ object ChromiumKeys {
         if (on) verify(ctx) else check = Check.UNKNOWN
     }
 
-    /** Conditions: root works and either resetprop exists, or the user-supplied mprop2 is present with SELinux permissive. */
+    /** Conditions: root works and resetprop exists. */
     fun verify(ctx: Context) {
         val app = ctx.applicationContext
         check = Check.CHECKING
@@ -43,9 +43,7 @@ object ChromiumKeys {
             val v = r.stdout.lineSequence().mapNotNull { l -> l.split('=', limit = 2).takeIf { it.size == 2 } }.associate { it[0] to it[1] }
             check = when {
                 r.exit != 0 -> Check.NO_ROOT
-                v["resetprop"] != "none" -> Check.READY
-                v["mprop2"] == "none" -> Check.NO_RESETPROP
-                v["selinux"] != "permissive" -> Check.NEEDS_PERMISSIVE
+                v["resetprop"] == "none" -> Check.NO_RESETPROP
                 else -> Check.READY
             }
         }

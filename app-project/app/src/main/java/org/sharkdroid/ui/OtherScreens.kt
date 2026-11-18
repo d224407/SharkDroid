@@ -460,7 +460,6 @@ fun SettingsScreen(
                 ChromiumKeys.Check.READY -> R.string.chromium_ready
                 ChromiumKeys.Check.NO_ROOT -> R.string.chromium_no_root
                 ChromiumKeys.Check.NO_RESETPROP -> R.string.chromium_no_resetprop
-                ChromiumKeys.Check.NEEDS_PERMISSIVE -> R.string.chromium_needs_permissive
                 else -> R.string.chromium_checking
             }), style = MaterialTheme.typography.bodyMedium) })
 

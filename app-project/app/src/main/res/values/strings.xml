@@ -175,8 +175,7 @@
     <string name="chromium_checking">Checking root and resetprop...</string>
     <string name="chromium_ready">Ready: root works and resetprop was found</string>
     <string name="chromium_no_root">Not available: root access was denied</string>
-    <string name="chromium_no_resetprop">Not available: no resetprop (Magisk, KernelSU, APatch) and no /data/local/tmp/mprop2</string>
-    <string name="chromium_needs_permissive">mprop2 found, but SELinux is enforcing: run setenforce 0 first</string>
+    <string name="chromium_no_resetprop">Not available: no resetprop (Magisk, KernelSU, APatch)</string>
     <string name="settings_update">Check for updates</string>
     <string name="update_d">Asks GitHub for the latest release (only when you tap)</string>
     <string name="update_checking">Checking...</string>
