@@ -166,12 +166,13 @@
     <string name="chromium_checking">正在检查 root 和 resetprop…</string>
     <string name="chromium_ready">可用：root 正常，已找到 resetprop</string>
     <string name="chromium_no_root">不可用：root 权限被拒绝</string>
-    <string name="chromium_no_resetprop">不可用：未找到 resetprop（Magisk、KernelSU 或 APatch）</string>
+    <string name="chromium_no_resetprop">不可用：没有 resetprop（Magisk、KernelSU、APatch），也没有 /data/local/tmp/mprop2</string>
+    <string name="chromium_needs_permissive">已找到 mprop2，但 SELinux 为 enforcing：请先执行 setenforce 0</string>
     <string name="settings_update">检查更新</string>
     <string name="update_d">向 GitHub 查询最新版本（仅在点击时联网）</string>
     <string name="update_checking">正在检查…</string>
     <string name="update_latest">已是最新版本</string>
-    <string name="update_newer">有新版本 %1$s，点击打开发布页面。</string>
+    <string name="update_newer">有新版本：%1$s，点击打开发布页面。</string>
     <string name="update_failed">无法检查更新</string>
     <string name="settings_privacy">隐私与安全</string>
     <string name="settings_security">SharkDroid 如何保护你</string>
@@ -268,7 +269,7 @@
     <string name="resources_text">文本 / 代码（%1$d）</string>
     <string name="resources_documents">文档（%1$d）</string>
     <string name="resources_fonts">字体（%1$d）</string>
-    <string name="resources_archives">压缩包（%1$d）</string>
+    <string name="resources_archives">压缩包 / APK（%1$d）</string>
     <string name="resources_other">其他（%1$d）</string>
     <string name="resources_saved">已保存</string>
     <string name="resources_save_failed">无法保存文件</string>

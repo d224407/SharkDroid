@@ -37,7 +37,8 @@
  *   dbgset <package> <1|0>      -> 1: remembers ro.debuggable, sets it to 1 with resetprop (Magisk / KernelSU / APatch) and
  *                                  writes the Chromium command-line files with --ssl-key-log-file pointing into the
  *                                  app's own cache directory (the file 'tlskeys' follows); 0: removes the files and
- *                                  puts ro.debuggable back
+ *                                  puts ro.debuggable back; without resetprop it falls back to the user-supplied
+ *                                  /data/local/tmp/mprop2 (SELinux must already be permissive)
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -435,6 +436,8 @@ static int cmd_zfinstall(void) {
 
 /* Chromium key log: ro.debuggable via resetprop, plus the command-line files Chrome / WebView read on debuggable systems. */
 #define DBG_ORIG "/data/local/tmp/sharkdroid-dbg-orig"
+#define MPROP_PATH "/data/local/tmp/mprop2" /* user-supplied: patches init so ro.* can be set (needs SELinux permissive) */
+#define SETPROP_PATH "/system/bin/setprop"
 static const char *const RESETPROP_PATHS[] = {
     "/data/adb/magisk/resetprop", "/data/adb/ksu/bin/resetprop", "/data/adb/ap/bin/resetprop", "/system/bin/resetprop", NULL };
 static const char *const CMDLINE_FILES[] = {
@@ -464,12 +467,60 @@ static int run_resetprop(const char *rp, const char *key, const char *val) {
     return WIFEXITED(st) && WEXITSTATUS(st) == 0 ? 0 : -1;
 }
 
+static int selinux_permissive(void) {
+    char c = 0;
+    int fd = open("/sys/fs/selinux/enforce", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return -1;
+    if (read(fd, &c, 1) != 1) c = 0;
+    close(fd);
+    return c == '0' ? 1 : c == '1' ? 0 : -1;
+}
+
+/* Run a program without a shell, output discarded, killed after timeout_s seconds. */
+static int run_timed(const char *path, char *const argv[], int timeout_s) {
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        int nul = open("/dev/null", O_RDWR);
+        if (nul >= 0) { dup2(nul, 1); dup2(nul, 2); }
+        execv(path, argv);
+        _exit(127);
+    }
+    for (int i = 0; i < timeout_s * 5; i++) {
+        int st = 0;
+        pid_t r = waitpid(pid, &st, WNOHANG);
+        if (r == pid) return WIFEXITED(st) && WEXITSTATUS(st) == 0 ? 0 : -1;
+        if (r < 0) return -1;
+        struct timespec ts = { 0, 200 * 1000 * 1000 };
+        nanosleep(&ts, NULL);
+    }
+    kill(pid, SIGKILL);
+    waitpid(pid, NULL, 0);
+    return -1;
+}
+
+/* Set ro.debuggable: resetprop when present, else patch init with mprop2 (SELinux must already be permissive). */
+static int set_debuggable(const char *val) {
+    const char *rp = find_resetprop();
+    if (rp) return run_resetprop(rp, "ro.debuggable", val);
+    if (access(MPROP_PATH, X_OK) != 0) return -1;
+    if (selinux_permissive() != 1) return -1;
+    char *on[] = { (char *)MPROP_PATH, (char *)"1", (char *)"--on", NULL };
+    char *off[] = { (char *)MPROP_PATH, (char *)"1", (char *)"--off", NULL };
+    char *sp[] = { (char *)SETPROP_PATH, (char *)"ro.debuggable", (char *)val, NULL };
+    int rc = run_timed(MPROP_PATH, on, 300) == 0 ? run_timed(SETPROP_PATH, sp, 15) : -1;
+    run_timed(MPROP_PATH, off, 300); /* always put init back */
+    return rc;
+}
+
 static int cmd_dbgstate(void) {
     char dbg[PROP_VALUE_MAX], bt[PROP_VALUE_MAX];
     get_prop("ro.debuggable", dbg, sizeof dbg);
     get_prop("ro.build.type", bt, sizeof bt);
     const char *rp = find_resetprop();
-    printf("debuggable=%s\nbuildtype=%s\nresetprop=%s\n", dbg, bt, rp ? rp : "none");
+    int pm = selinux_permissive();
+    printf("debuggable=%s\nbuildtype=%s\nresetprop=%s\nmprop2=%s\nselinux=%s\n", dbg, bt, rp ? rp : "none",
+           access(MPROP_PATH, X_OK) == 0 ? MPROP_PATH : "none", pm == 1 ? "permissive" : pm == 0 ? "enforcing" : "unknown");
     return 0;
 }
 
@@ -480,12 +531,13 @@ static int cmd_dbgset(char **tok, int ntok) {
     const char *rp = find_resetprop();
     if (on[0] == '1') {
         if (!valid_pkg(pkg)) die("dbgset: invalid package name");
-        if (!rp) die("dbgset: resetprop not found");
+        if (!rp && access(MPROP_PATH, X_OK) != 0) die("dbgset: resetprop and mprop2 not found");
+        if (!rp && selinux_permissive() != 1) die("dbgset: SELinux must be permissive for mprop2");
         char cur[PROP_VALUE_MAX];
         get_prop("ro.debuggable", cur, sizeof cur);
         int ofd = open(DBG_ORIG, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
         if (ofd >= 0) { dprintf(ofd, "%s\n", cur[0] ? cur : "0"); close(ofd); }
-        if (strcmp(cur, "1") != 0 && run_resetprop(rp, "ro.debuggable", "1") != 0) die("dbgset: resetprop failed");
+        if (strcmp(cur, "1") != 0 && set_debuggable("1") != 0) die("dbgset: could not set ro.debuggable");
         for (int i = 0; CMDLINE_FILES[i]; i++) {
             int fd = open(CMDLINE_FILES[i], O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0644);
             if (fd < 0) die("dbgset: cannot write command-line file");
@@ -505,8 +557,8 @@ static int cmd_dbgset(char **tok, int ntok) {
         unlink(DBG_ORIG);
         char cur[PROP_VALUE_MAX];
         get_prop("ro.debuggable", cur, sizeof cur);
-        if (rp && (strcmp(orig, "0") == 0 || strcmp(orig, "1") == 0) && strcmp(cur, orig) != 0)
-            run_resetprop(rp, "ro.debuggable", orig);
+        if ((strcmp(orig, "0") == 0 || strcmp(orig, "1") == 0) && strcmp(cur, orig) != 0)
+            set_debuggable(orig);
     }
     return 0;
 }

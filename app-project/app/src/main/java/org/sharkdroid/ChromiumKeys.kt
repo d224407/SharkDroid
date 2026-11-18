@@ -13,7 +13,7 @@ import kotlin.concurrent.thread
  * into the target app's cache, the file the TLS add-on already follows. Everything is put back when the capture ends.
  */
 object ChromiumKeys {
-    enum class Check { UNKNOWN, CHECKING, READY, NO_ROOT, NO_RESETPROP }
+    enum class Check { UNKNOWN, CHECKING, READY, NO_ROOT, NO_RESETPROP, NEEDS_PERMISSIVE }
 
     var enabled by mutableStateOf(false); private set
     var check by mutableStateOf(Check.UNKNOWN); private set
@@ -34,15 +34,18 @@ object ChromiumKeys {
         if (on) verify(ctx) else check = Check.UNKNOWN
     }
 
-    /** Conditions: root works and a resetprop binary (Magisk, KernelSU or APatch) exists. */
+    /** Conditions: root works and either resetprop exists, or the user-supplied mprop2 is present with SELinux permissive. */
     fun verify(ctx: Context) {
         val app = ctx.applicationContext
         check = Check.CHECKING
         thread(name = "dbgstate") {
             val r = RootHelper.run(app, "dbgstate", timeoutSec = 10)
+            val v = r.stdout.lineSequence().mapNotNull { l -> l.split('=', limit = 2).takeIf { it.size == 2 } }.associate { it[0] to it[1] }
             check = when {
                 r.exit != 0 -> Check.NO_ROOT
-                r.stdout.lineSequence().any { it == "resetprop=none" } -> Check.NO_RESETPROP
+                v["resetprop"] != "none" -> Check.READY
+                v["mprop2"] == "none" -> Check.NO_RESETPROP
+                v["selinux"] != "permissive" -> Check.NEEDS_PERMISSIVE
                 else -> Check.READY
             }
         }
@@ -52,7 +55,7 @@ object ChromiumKeys {
     fun apply(ctx: Context, pkg: String): String? {
         init(ctx)
         if (!enabled) return null
-        val r = RootHelper.run(ctx, "dbgset", listOf(pkg, "1"))
+        val r = RootHelper.run(ctx, "dbgset", listOf(pkg, "1"), timeoutSec = 700)
         if (r.exit != 0) return r.stderr.trim().lineSequence().firstOrNull().orEmpty().ifEmpty { "exit ${r.exit}" }
         applied = true
         return null
@@ -61,6 +64,6 @@ object ChromiumKeys {
     fun restore(ctx: Context) {
         if (!applied) return
         applied = false
-        runCatching { RootHelper.run(ctx, "dbgset", listOf("-", "0")) }
+        runCatching { RootHelper.run(ctx, "dbgset", listOf("-", "0"), timeoutSec = 700) }
     }
 }

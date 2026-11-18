@@ -27,6 +27,8 @@ android {
         targetSdk = 35
         versionCode = 3
         versionName = "1.1.1"
+        // The release workflow passes the run number; it is the number in the "build-<n>-<sha>" release tags.
+        buildConfigField("int", "BUILD_NUMBER", "${(project.findProperty("buildNumber") as String?)?.toIntOrNull() ?: 0}")
         ndk { abiFilters += "arm64-v8a" }
     }
 

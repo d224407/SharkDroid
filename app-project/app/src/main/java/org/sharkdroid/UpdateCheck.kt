@@ -20,7 +20,7 @@ object UpdateCheck {
     /** Release page of the newer version (always an https://github.com/ address). */
     var url by mutableStateOf(""); private set
 
-    fun check(current: String) {
+    fun check(current: String, build: Int) {
         if (state == State.CHECKING) return
         state = State.CHECKING
         thread(name = "update-check") {
@@ -43,8 +43,11 @@ object UpdateCheck {
                         val page = j.optString("html_url")
                         if (tag.isEmpty() || !page.startsWith("https://github.com/")) State.FAILED
                         else {
-                            latest = tag; url = page
-                            if (newer(tag, current)) State.NEWER else State.LATEST
+                            url = page
+                            // Releases are tagged "build-<run number>-<sha>"; fall back to dotted versions for other tags.
+                            val n = Regex("^build-(\\d+)-").find(tag)?.groupValues?.get(1)?.toIntOrNull()
+                            latest = if (n != null) "build $n" else tag
+                            if (if (n != null) n > build else newer(tag, current)) State.NEWER else State.LATEST
                         }
                     }
                 } finally { c.disconnect() }

@@ -128,6 +128,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.sharkdroid.BuildConfig
 import org.sharkdroid.ChromiumKeys
 import org.sharkdroid.IfaceInfo
 import org.sharkdroid.R
@@ -459,6 +460,7 @@ fun SettingsScreen(
                 ChromiumKeys.Check.READY -> R.string.chromium_ready
                 ChromiumKeys.Check.NO_ROOT -> R.string.chromium_no_root
                 ChromiumKeys.Check.NO_RESETPROP -> R.string.chromium_no_resetprop
+                ChromiumKeys.Check.NEEDS_PERMISSIVE -> R.string.chromium_needs_permissive
                 else -> R.string.chromium_checking
             }), style = MaterialTheme.typography.bodyMedium) })
 
@@ -488,7 +490,7 @@ fun SettingsScreen(
                 modifier = Modifier.clickable {
                     if (UpdateCheck.state == UpdateCheck.State.NEWER)
                         runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(UpdateCheck.url))) }
-                    else UpdateCheck.check(versionName)
+                    else UpdateCheck.check(versionName, BuildConfig.BUILD_NUMBER)
                 },
             )
             ListItem(
