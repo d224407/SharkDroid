@@ -128,9 +128,11 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.sharkdroid.ChromiumKeys
 import org.sharkdroid.IfaceInfo
 import org.sharkdroid.R
 import org.sharkdroid.Tools
+import org.sharkdroid.UpdateCheck
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
