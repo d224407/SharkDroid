@@ -449,6 +449,17 @@ fun SettingsScreen(
                 leadingContent = { Icon(Icons.Outlined.Translate, null) },
             )
 
+            SectionHeader(R.string.settings_tls)
+            val ctx = LocalContext.current
+            LaunchedEffect(Unit) { ChromiumKeys.init(ctx); if (ChromiumKeys.enabled) ChromiumKeys.verify(ctx) }
+            SwitchItem(Icons.Outlined.Lock, R.string.settings_chromium, R.string.settings_chromium_d, ChromiumKeys.enabled, true) { ChromiumKeys.setEnabled(ctx, it) }
+            if (ChromiumKeys.enabled) ListItem(headlineContent = { Text(stringResource(when (ChromiumKeys.check) {
+                ChromiumKeys.Check.READY -> R.string.chromium_ready
+                ChromiumKeys.Check.NO_ROOT -> R.string.chromium_no_root
+                ChromiumKeys.Check.NO_RESETPROP -> R.string.chromium_no_resetprop
+                else -> R.string.chromium_checking
+            }), style = MaterialTheme.typography.bodyMedium) })
+
             SectionHeader(R.string.settings_privacy)
             ListItem(
                 headlineContent = { Text(stringResource(R.string.settings_security)) },
@@ -461,6 +472,22 @@ fun SettingsScreen(
                 headlineContent = { Text(stringResource(R.string.app_name)) },
                 supportingContent = { Text(stringResource(R.string.settings_version, versionName, Tools.WIRESHARK_VERSION)) },
                 leadingContent = { Icon(Icons.Outlined.Info, null) },
+            )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_update)) },
+                supportingContent = { Text(when (UpdateCheck.state) {
+                    UpdateCheck.State.CHECKING -> stringResource(R.string.update_checking)
+                    UpdateCheck.State.LATEST -> stringResource(R.string.update_latest)
+                    UpdateCheck.State.NEWER -> stringResource(R.string.update_newer, UpdateCheck.latest)
+                    UpdateCheck.State.FAILED -> stringResource(R.string.update_failed)
+                    else -> stringResource(R.string.update_d)
+                }) },
+                leadingContent = { Icon(Icons.Filled.Refresh, null) },
+                modifier = Modifier.clickable {
+                    if (UpdateCheck.state == UpdateCheck.State.NEWER)
+                        runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(UpdateCheck.url))) }
+                    else UpdateCheck.check(versionName)
+                },
             )
             ListItem(
                 headlineContent = { Text(stringResource(R.string.licenses_title)) },

@@ -2,7 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- No INTERNET permission: the app never talks to the network. -->
+    <!-- Only for the manual "Check for updates" row in Settings (one request to the GitHub releases API). -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Keep the capture alive while the user switches to other apps. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />

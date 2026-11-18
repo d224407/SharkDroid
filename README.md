@@ -33,7 +33,7 @@ The release APK is signed with a self-signed certificate, SHA-256 `72590f3238296
 
 1. On the phone, enable USB debugging in Developer options. This is only needed for adb; you can also copy the APK to the phone and open it there.
 2. On the computer: `adb install SharkDroid-<version>-wireshark-4.6.9-arm64-release.apk`
-   - Some ROMs show a "security check" screen before installing. Choose to continue (the app has no internet permission).
+   - Some ROMs show a "security check" screen before installing. Choose to continue (the app only goes online when you tap **Check for updates**).
 3. Open SharkDroid. The first time, it asks for superuser access:
    - **Magisk**: tap "Allow" in the prompt ("Forever" is recommended).
    - **KernelSU / APatch**: enable root for SharkDroid in the manager app, then go back to SharkDroid and tap **Retry** on the banner.
@@ -131,9 +131,10 @@ The binaries only depend on the system `libc.so`; everything else is statically 
   - The NDK is checked against the SHA1 in Google's repository manifest.
   - libffi publishes no signatures, so only its SHA256 is pinned; nghttp2 and nghttp3 are SHA256-pinned too.
   - No third-party prebuilt binaries (not even Termux packages) are used; every dependency is built from source. See `SOURCES.txt`.
-- **Minimal permissions**: no INTERNET permission. The app never goes online and has no analytics, telemetry or ads. tshark always runs with `-n` (no reverse DNS). Requested permissions:
+- **Minimal permissions**: INTERNET is used only by the manual **Check for updates** row in Settings (one request to the GitHub releases API when you tap it). Nothing is sent automatically, and there are no analytics, telemetry or ads. tshark always runs with `-n` (no reverse DNS). Requested permissions:
   - `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_SPECIAL_USE`, to keep a capture running
   - optional `POST_NOTIFICATIONS`
+  - `INTERNET`, only for the manual update check
 
   The EmojiCompat downloadable-font initializer and the exported profile-installer receiver that AndroidX would add are removed from the manifest.
 - **Root only for dumpcap**: the only string ever passed to `su -c` is a fixed path: the native library path assigned by the package manager, checked against a character whitelist and single-quoted. User input (interface name, filter) goes over stdin to the root helper `libwsexec.so` (about 300 lines of C, source in `helper/wsexec.c`), NUL-separated with an argument count. The helper:

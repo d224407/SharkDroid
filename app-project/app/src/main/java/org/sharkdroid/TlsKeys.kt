@@ -115,12 +115,13 @@ object TlsKeys {
         thread(name = "tlskeys") {
             var previous: JSONObject? = null
             var edited = false
-            fun restore() { if (edited) runCatching { editConfig(app, pkg, previous) }; edited = false }
+            fun restore() { if (edited) runCatching { editConfig(app, pkg, previous) }; edited = false; ChromiumKeys.restore(app) }
             try {
                 val prep = RootHelper.run(app, "zfprep", listOf(pkg))
                 if (prep.exit != 0) error(helperError(prep))
                 previous = editConfig(app, pkg, ourEntry(pkg))?.takeIf { !isOurs(it) }
                 edited = true
+                ChromiumKeys.apply(app, pkg)?.let { log = it }
             } catch (e: Exception) {
                 log = e.message ?: "setup failed"; state = State.IDLE; return@thread
             }

@@ -33,12 +33,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.BrokenImage
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.SaveAlt
+import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -97,6 +99,9 @@ private fun kindIcon(k: Resources.Kind) = when (k) {
     Resources.Kind.VIDEO -> Icons.Outlined.Movie
     Resources.Kind.AUDIO -> Icons.Outlined.GraphicEq
     Resources.Kind.TEXT -> Icons.Outlined.Description
+    Resources.Kind.DOCUMENT -> Icons.Outlined.Description
+    Resources.Kind.FONT -> Icons.Outlined.TextFields
+    Resources.Kind.ARCHIVE -> Icons.Outlined.Archive
     Resources.Kind.OTHER -> Icons.Outlined.InsertDriveFile
 }
 
@@ -161,6 +166,9 @@ private fun kindLabel(k: Resources.Kind) = when (k) {
     Resources.Kind.VIDEO -> R.string.resources_video
     Resources.Kind.AUDIO -> R.string.resources_audio
     Resources.Kind.TEXT -> R.string.resources_text
+    Resources.Kind.DOCUMENT -> R.string.resources_documents
+    Resources.Kind.FONT -> R.string.resources_fonts
+    Resources.Kind.ARCHIVE -> R.string.resources_archives
     Resources.Kind.OTHER -> R.string.resources_other
 }
 

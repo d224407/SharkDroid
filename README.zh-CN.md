@@ -33,7 +33,7 @@ release APK 使用自签名证书，SHA-256 为 `72590f3238296885b7d1a2b9b600594
 
 1. 在手机的开发者选项里打开 USB 调试。只有用 adb 安装时才需要；也可以把 APK 拷到手机上直接打开安装。
 2. 在电脑上运行：`adb install SharkDroid-<版本>-wireshark-4.6.9-arm64-release.apk`
-   - 部分 ROM 安装前会弹出“安全检查”页面，选择继续即可（App 没有联网权限）。
+   - 部分 ROM 安装前会弹出“安全检查”页面，选择继续即可（App 只在你点击“检查更新”时才联网）。
 3. 打开 SharkDroid。第一次打开时会请求超级用户权限：
    - **Magisk**：在弹窗里点“允许”（建议选“永久”）。
    - **KernelSU / APatch**：在管理器 App 里给 SharkDroid 打开 root，然后回到 SharkDroid，点横幅上的**重试**。
@@ -127,9 +127,10 @@ sh ws.sh tshark -n -i rmnet_data0 -f "udp port 53"         # tshark 直接抓包
   - NDK 对照了 Google 仓库清单里的 SHA1。
   - libffi 上游不发布签名，只固定了 SHA256；nghttp2 和 nghttp3 同样只固定 SHA256。
   - 没有使用任何第三方预编译二进制（Termux 的包也没有用），所有依赖都从源码编译。详见 `SOURCES.txt`。
-- **最少权限**：没有 INTERNET 权限，App 完全不联网，没有统计、遥测或广告。tshark 一律带 `-n` 运行，不做 DNS 反查。申请的权限只有：
+- **最少权限**：INTERNET 权限只用于设置里手动的“检查更新”（点击时向 GitHub releases API 发一次请求）。不会自动发送任何数据，没有统计、遥测或广告。tshark 一律带 `-n` 运行，不做 DNS 反查。申请的权限只有：
   - `FOREGROUND_SERVICE` 和 `FOREGROUND_SERVICE_SPECIAL_USE`，用来让抓包保持运行
   - 可选的 `POST_NOTIFICATIONS`
+  - `INTERNET`，仅用于手动检查更新
 
   AndroidX 默认会加入的 EmojiCompat 可下载字体初始化器，以及导出的 profile-installer 接收器，都已从清单中移除。
 - **只有 dumpcap 拿到 root**：交给 `su -c` 的始终是一个固定路径，也就是包管理器分配的原生库路径，经过字符白名单校验并加单引号。用户输入（接口名、过滤器）通过 stdin 交给 root 辅助程序 `libwsexec.so`（约 300 行 C，源码在 `helper/wsexec.c`），格式是 NUL 分隔并带参数个数。这个辅助程序会：

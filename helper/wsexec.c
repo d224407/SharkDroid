@@ -32,6 +32,12 @@
  *                                  and relays its lines to stdout: "[TLSKEY] <nss key log line>" and
  *                                  "[TLS] hooked <lib>", preceded by "[WAIT] <pkg>" / "[ATTACH] <pkg>" status
  *                                  lines. Stopped like 'capture'.
+ *   Chromium key log (optional; for WebView / Chrome, which keep BoringSSL inside their own library):
+ *   dbgstate                    -> prints debuggable=<ro.debuggable>, buildtype=<ro.build.type>, resetprop=<path|none>
+ *   dbgset <package> <1|0>      -> 1: remembers ro.debuggable, sets it to 1 with resetprop (Magisk / KernelSU / APatch) and
+ *                                  writes the Chromium command-line files with --ssl-key-log-file pointing into the
+ *                                  app's own cache directory (the file 'tlskeys' follows); 0: removes the files and
+ *                                  puts ro.debuggable back
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -50,6 +56,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <sys/system_properties.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/xattr.h>
@@ -425,6 +432,94 @@ static int cmd_zfinstall(void) {
     return 5;
 }
 
+
+/* Chromium key log: ro.debuggable via resetprop, plus the command-line files Chrome / WebView read on debuggable systems. */
+#define DBG_ORIG "/data/local/tmp/sharkdroid-dbg-orig"
+static const char *const RESETPROP_PATHS[] = {
+    "/data/adb/magisk/resetprop", "/data/adb/ksu/bin/resetprop", "/data/adb/ap/bin/resetprop", "/system/bin/resetprop", NULL };
+static const char *const CMDLINE_FILES[] = {
+    "/data/local/tmp/chrome-command-line", "/data/local/tmp/webview-command-line",
+    "/data/local/tmp/android-webview-command-line", NULL };
+
+static const char *find_resetprop(void) {
+    for (int i = 0; RESETPROP_PATHS[i]; i++) if (access(RESETPROP_PATHS[i], X_OK) == 0) return RESETPROP_PATHS[i];
+    return NULL;
+}
+
+static void get_prop(const char *key, char *out, size_t n) {
+    char v[PROP_VALUE_MAX] = "";
+    __system_property_get(key, v);
+    snprintf(out, n, "%s", v);
+}
+
+static int run_resetprop(const char *rp, const char *key, const char *val) {
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        execl(rp, rp, key, val, (char *)NULL);
+        _exit(127);
+    }
+    int st = 0;
+    if (waitpid(pid, &st, 0) < 0) return -1;
+    return WIFEXITED(st) && WEXITSTATUS(st) == 0 ? 0 : -1;
+}
+
+static int cmd_dbgstate(void) {
+    char dbg[PROP_VALUE_MAX], bt[PROP_VALUE_MAX];
+    get_prop("ro.debuggable", dbg, sizeof dbg);
+    get_prop("ro.build.type", bt, sizeof bt);
+    const char *rp = find_resetprop();
+    printf("debuggable=%s\nbuildtype=%s\nresetprop=%s\n", dbg, bt, rp ? rp : "none");
+    return 0;
+}
+
+static int cmd_dbgset(char **tok, int ntok) {
+    if (ntok != 4) die("dbgset: bad argument count");
+    const char *pkg = tok[2], *on = tok[3];
+    if (strcmp(on, "1") != 0 && strcmp(on, "0") != 0) die("dbgset: bad flag");
+    const char *rp = find_resetprop();
+    if (on[0] == '1') {
+        if (!valid_pkg(pkg)) die("dbgset: invalid package name");
+        if (!rp) die("dbgset: resetprop not found");
+        char cur[PROP_VALUE_MAX];
+        get_prop("ro.debuggable", cur, sizeof cur);
+        int ofd = open(DBG_ORIG, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+        if (ofd >= 0) { dprintf(ofd, "%s\n", cur[0] ? cur : "0"); close(ofd); }
+        if (strcmp(cur, "1") != 0 && run_resetprop(rp, "ro.debuggable", "1") != 0) die("dbgset: resetprop failed");
+        for (int i = 0; CMDLINE_FILES[i]; i++) {
+            int fd = open(CMDLINE_FILES[i], O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0644);
+            if (fd < 0) die("dbgset: cannot write command-line file");
+            dprintf(fd, "_ --ssl-key-log-file=/data/data/%s/cache/sharkdroid_tlskeys.log\n", pkg);
+            fchmod(fd, 0644);
+            close(fd);
+        }
+        return 0;
+    }
+    for (int i = 0; CMDLINE_FILES[i]; i++) unlink(CMDLINE_FILES[i]);
+    char orig[16] = "";
+    int fd = open(DBG_ORIG, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    if (fd >= 0) {
+        ssize_t r = read(fd, orig, sizeof orig - 1);
+        close(fd);
+        if (r > 0) { orig[r] = 0; char *nl = strchr(orig, '\n'); if (nl) *nl = 0; }
+        unlink(DBG_ORIG);
+        char cur[PROP_VALUE_MAX];
+        get_prop("ro.debuggable", cur, sizeof cur);
+        if (rp && (strcmp(orig, "0") == 0 || strcmp(orig, "1") == 0) && strcmp(cur, orig) != 0)
+            run_resetprop(rp, "ro.debuggable", orig);
+    }
+    return 0;
+}
+
+/* NSS key log labels, as written by Chromium's --ssl-key-log-file. */
+static int is_nss_line(const char *l) {
+    static const char *const L[] = {
+        "CLIENT_RANDOM ", "CLIENT_HANDSHAKE_TRAFFIC_SECRET ", "SERVER_HANDSHAKE_TRAFFIC_SECRET ", "CLIENT_TRAFFIC_SECRET_0 ",
+        "SERVER_TRAFFIC_SECRET_0 ", "EXPORTER_SECRET ", "EARLY_EXPORTER_SECRET ", "CLIENT_EARLY_TRAFFIC_SECRET ", NULL };
+    for (int i = 0; L[i]; i++) if (strncmp(l, L[i], strlen(L[i])) == 0) return 1;
+    return 0;
+}
+
 /* Follow the key file the injected script appends to inside the app's data directory and relay the
  * lines we know ("[TLSKEY] ..." and "[TLS] ..."); anything else the (untrusted) app wrote there is dropped. */
 static int cmd_tlskeys(char **tok, int ntok) {
@@ -460,8 +555,11 @@ static int cmd_tlskeys(char **tok, int ntok) {
                     char c = buf[i];
                     if (c == '\n') {
                         line[ll] = 0;
-                        if (strncmp(line, "[TLSKEY] ", 9) == 0 || strncmp(line, "[TLS] ", 6) == 0)
+                        if (strncmp(line, "[TLSKEY] ", 9) == 0 || strncmp(line, "[TLS] ", 6) == 0) {
                             if (dprintf(1, "%s\n", line) < 0) return 0;
+                        } else if (is_nss_line(line)) { /* raw key log written by Chromium itself */
+                            if (dprintf(1, "[TLSKEY] %s\n", line) < 0) return 0;
+                        }
                         ll = 0;
                     } else if (ll < sizeof line - 1) {
                         line[ll++] = c;
@@ -550,6 +648,8 @@ int main(void) {
     if (strcmp(cmd, "zfsetconfig") == 0) return cmd_zfsetconfig(tok, ntok);
     if (strcmp(cmd, "zfinstall") == 0) return cmd_zfinstall();
     if (strcmp(cmd, "zfrestart") == 0) return cmd_zfrestart(tok, ntok);
+    if (strcmp(cmd, "dbgstate") == 0) return cmd_dbgstate();
+    if (strcmp(cmd, "dbgset") == 0) return cmd_dbgset(tok, ntok);
     die("unknown command");
     return 2;
 }
