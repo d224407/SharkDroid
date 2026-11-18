@@ -105,7 +105,11 @@ object Dissector {
     /**
      * Start `tshark <args>` with [input] as stdin. Ownership of [input] passes to this call.
      */
-    fun start(ctx: Context, args: List<String>, input: ParcelFileDescriptor): Job {
+    /** Lets TCP reassembly accept a retransmitted segment that arrives after the ones following it (a packet the capture missed). */
+    private val REASSEMBLY = listOf("-o", "tcp.reassemble_out_of_order:TRUE")
+
+    fun start(ctx: Context, rawArgs: List<String>, input: ParcelFileDescriptor): Job {
+        val args = REASSEMBLY + rawArgs
         val outPipe = ParcelFileDescriptor.createPipe()
         val errPipe = ParcelFileDescriptor.createPipe()
         try {
