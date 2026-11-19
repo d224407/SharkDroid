@@ -28,7 +28,7 @@ jobs:
         id: cache
         uses: actions/cache@v4
         with:
-          path: app-project/app/src/main/jniLibs/arm64-v8a
+          path: app/src/main/jniLibs/arm64-v8a
           key: wireshark-native-${{ hashFiles('scripts/**', 'helper/**', 'patches/**', 'stubs/**', 'SOURCES.txt') }}
 
       - name: Install build tools
@@ -54,7 +54,7 @@ jobs:
       # The tools reach the build job through the cache above (saved when this job ends), so no
       # intermediate artifact is published: the APK is the only artifact of a run.
       - name: Verify native tools
-        run: test -s app-project/app/src/main/jniLibs/arm64-v8a/libtshark.so
+        run: test -s app/src/main/jniLibs/arm64-v8a/libtshark.so
 
   # Optional TLS add-on: the ZygiskFrida Magisk/KernelSU module (https://github.com/lico-n/ZygiskFrida), built from
   # source at a pinned tag, with the gadget version switched to the latest Frida release.
@@ -137,13 +137,13 @@ jobs:
       - name: Restore native tools
         uses: actions/cache/restore@v4
         with:
-          path: app-project/app/src/main/jniLibs/arm64-v8a
+          path: app/src/main/jniLibs/arm64-v8a
           key: wireshark-native-${{ hashFiles('scripts/**', 'helper/**', 'patches/**', 'stubs/**', 'SOURCES.txt') }}
           fail-on-cache-miss: true
 
       # Optional TLS add-on: the key-logging script and the ZygiskFrida module zip (the app installs it on request).
       - name: Add TLS key script
-        run: install -m 644 addon/tlskeys.js app-project/app/src/main/jniLibs/arm64-v8a/libtlskeys.so
+        run: install -m 644 addon/tlskeys.js app/src/main/jniLibs/arm64-v8a/libtlskeys.so
 
       - name: Restore ZygiskFrida module
         id: zf
@@ -154,7 +154,7 @@ jobs:
 
       - name: Add ZygiskFrida module to the app
         if: steps.zf.outputs.cache-matched-key != ''
-        run: install -m 644 zygiskfrida.zip app-project/app/src/main/jniLibs/arm64-v8a/libzygiskfrida.so
+        run: install -m 644 zygiskfrida.zip app/src/main/jniLibs/arm64-v8a/libzygiskfrida.so
 
       - name: Prepare release keystore
         if: env.HAS_KEYSTORE == 'true'
@@ -170,14 +170,13 @@ jobs:
           echo "SHARKDROID_KEYSTORE_PROPS=$RUNNER_TEMP/keystore.properties" >> "$GITHUB_ENV"
 
       - name: Build release APK
-        working-directory: app-project
         run: gradle assembleRelease -PbuildNumber=${{ github.run_number }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: sharkdroid
-          path: app-project/app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
       # An unsigned release APK cannot be installed, so releases need the signing secrets.
@@ -187,7 +186,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${{ github.run_number }}-${GITHUB_SHA::7}"
-          cp app-project/app/build/outputs/apk/release/*.apk "sharkdroid-$tag.apk"
+          cp app/build/outputs/apk/release/*.apk "sharkdroid-$tag.apk"
           gh release create "$tag" "sharkdroid-$tag.apk" \
             --target "$GITHUB_SHA" \
             --title "$tag" \
