@@ -11,8 +11,10 @@ permissions:
   contents: write
 
 env:
-  # ZygiskFrida release built into the add-on (it bundles the Frida gadget of that release: v1.9.0 -> 17.4.0).
+  # ZygiskFrida tag built into the add-on. The Frida gadget it bundles is the latest Frida release,
+  # resolved at build time (fallback below if the lookup fails).
   ZF_REF: v1.9.0
+  FRIDA_FALLBACK: 17.4.0
 
 jobs:
   # Wireshark tools (tshark, dumpcap, root helper) cross-compiled with NDK r27c from the pinned,
@@ -26,7 +28,7 @@ jobs:
         id: cache
         uses: actions/cache@v4
         with:
-          path: app-project/app/src/main/jniLibs/arm64-v8a
+          path: app/src/main/jniLibs/arm64-v8a
           key: wireshark-native-${{ hashFiles('scripts/**', 'helper/**', 'patches/**', 'stubs/**', 'SOURCES.txt') }}
 
       - name: Install build tools
@@ -52,22 +54,34 @@ jobs:
       # The tools reach the build job through the cache above (saved when this job ends), so no
       # intermediate artifact is published: the APK is the only artifact of a run.
       - name: Verify native tools
-        run: test -s app-project/app/src/main/jniLibs/arm64-v8a/libtshark.so
+        run: test -s app/src/main/jniLibs/arm64-v8a/libtshark.so
 
   # Optional TLS add-on: the ZygiskFrida Magisk/KernelSU module (https://github.com/lico-n/ZygiskFrida), built from
-  # source at a pinned tag. Its build downloads and bundles the Frida gadget of that release (v1.9.0 -> Frida 17.4.0).
-  # The zip is cached per tag and ends up inside the APK, from where the app installs it on request.
-  # A failure only leaves the module out of the APK. To change the module (and Frida) version, change ZF_REF.
+  # source at a pinned tag, with the gadget version switched to the latest Frida release.
+  # The zip is cached per Frida version and ends up inside the APK, from where the app installs it on request.
+  # A new Frida release changes the cache key, so the next build picks it up. A failure only leaves the module out.
   zygiskfrida:
     runs-on: ubuntu-latest
     continue-on-error: true
+    outputs:
+      frida: ${{ steps.ver.outputs.frida }}
     steps:
+      - name: Resolve latest Frida
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="$(gh api repos/frida/frida/releases/latest --jq .tag_name 2>/dev/null | sed 's/^v//')"
+          [ -n "$v" ] || v="$FRIDA_FALLBACK"
+          echo "frida=$v" >> "$GITHUB_OUTPUT"
+          echo "Frida $v"
+
       - name: Restore module zip
         id: cache
         uses: actions/cache@v4
         with:
           path: zygiskfrida.zip
-          key: zygiskfrida-${{ env.ZF_REF }}-1
+          key: zygiskfrida-${{ steps.ver.outputs.frida }}-${{ env.ZF_REF }}-1
 
       - name: Set up JDK 17
         if: steps.cache.outputs.cache-hit != 'true'
@@ -81,6 +95,8 @@ jobs:
         run: |
           git clone --depth 1 --branch "$ZF_REF" --recurse-submodules --shallow-submodules https://github.com/lico-n/ZygiskFrida.git zf
           cd zf
+          sed -i -E 's|(fridaVersion = ")[^"]+|\1${{ steps.ver.outputs.frida }}|' module.gradle
+          grep -n fridaVersion module.gradle
           chmod +x gradlew
           ./gradlew :module:assembleRelease --no-daemon
           ls -l out
@@ -95,8 +111,32 @@ jobs:
           unzip -p zygiskfrida.zip module.prop | grep -q '^id='
           unzip -l zygiskfrida.zip | grep -q 'libgadget'
 
+  # Next version from Conventional Commits (semantic-release dry run). Empty when there is nothing to release.
+  version:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      next: ${{ steps.v.outputs.next }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Resolve next version
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          npx --yes semantic-release@24 --dry-run | tee "$RUNNER_TEMP/sr.log"
+          v="$(sed -n 's/.*next release version is \([0-9][^ ]*\).*/\1/p' "$RUNNER_TEMP/sr.log" | tail -n1)"
+          echo "next=$v" >> "$GITHUB_OUTPUT"
+
   build:
-    needs: [wireshark, zygiskfrida]
+    needs: [wireshark, zygiskfrida, version]
     # The module is optional: build the app even when its job failed.
     if: ${{ !cancelled() && needs.wireshark.result == 'success' }}
     runs-on: ubuntu-latest
@@ -121,24 +161,24 @@ jobs:
       - name: Restore native tools
         uses: actions/cache/restore@v4
         with:
-          path: app-project/app/src/main/jniLibs/arm64-v8a
+          path: app/src/main/jniLibs/arm64-v8a
           key: wireshark-native-${{ hashFiles('scripts/**', 'helper/**', 'patches/**', 'stubs/**', 'SOURCES.txt') }}
           fail-on-cache-miss: true
 
       # Optional TLS add-on: the key-logging script and the ZygiskFrida module zip (the app installs it on request).
       - name: Add TLS key script
-        run: install -m 644 addon/tlskeys.js app-project/app/src/main/jniLibs/arm64-v8a/libtlskeys.so
+        run: install -m 644 addon/tlskeys.js app/src/main/jniLibs/arm64-v8a/libtlskeys.so
 
       - name: Restore ZygiskFrida module
         id: zf
         uses: actions/cache/restore@v4
         with:
           path: zygiskfrida.zip
-          key: zygiskfrida-${{ env.ZF_REF }}-1
+          key: zygiskfrida-${{ needs.zygiskfrida.outputs.frida }}-${{ env.ZF_REF }}-1
 
       - name: Add ZygiskFrida module to the app
         if: steps.zf.outputs.cache-matched-key != ''
-        run: install -m 644 zygiskfrida.zip app-project/app/src/main/jniLibs/arm64-v8a/libzygiskfrida.so
+        run: install -m 644 zygiskfrida.zip app/src/main/jniLibs/arm64-v8a/libzygiskfrida.so
 
       - name: Prepare release keystore
         if: env.HAS_KEYSTORE == 'true'
@@ -154,25 +194,52 @@ jobs:
           echo "SHARKDROID_KEYSTORE_PROPS=$RUNNER_TEMP/keystore.properties" >> "$GITHUB_ENV"
 
       - name: Build release APK
-        working-directory: app-project
-        run: gradle assembleRelease
+        env:
+          NEXT_VERSION: ${{ needs.version.outputs.next }}
+        run: |
+          args=(-PbuildNumber=${{ github.run_number }})
+          if [ -n "$NEXT_VERSION" ]; then
+            IFS=. read -r ma mi pa <<< "${NEXT_VERSION%%-*}"
+            args+=(-PappVersionName="$NEXT_VERSION" -PappVersionCode=$((ma * 10000 + mi * 100 + pa)))
+          fi
+          gradle assembleRelease "${args[@]}"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: sharkdroid
-          path: app-project/app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
-      # An unsigned release APK cannot be installed, so releases need the signing secrets.
-      - name: Publish GitHub release (main only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.HAS_KEYSTORE == 'true'
+  # Tag, changelog and GitHub release via semantic-release; the signed APK is attached.
+  release:
+    needs: [version, build]
+    if: needs.version.outputs.next != '' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE: ${{ secrets.KEYSTORE_CONTENT != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sharkdroid
+          path: release
+
+      - name: Name APK
+        run: |
+          # An unsigned APK cannot be installed, so release only when signed.
+          [ "$HAS_KEYSTORE" = "true" ] || { echo "No signing secrets, skipping release"; exit 0; }
+          for f in release/*.apk; do mv "$f" "release/sharkdroid-${{ needs.version.outputs.next }}.apk"; done
+
+      - name: Semantic release
+        if: env.HAS_KEYSTORE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="build-${{ github.run_number }}-${GITHUB_SHA::7}"
-          cp app-project/app/build/outputs/apk/release/*.apk "sharkdroid-$tag.apk"
-          gh release create "$tag" "sharkdroid-$tag.apk" \
-            --target "$GITHUB_SHA" \
-            --title "$tag" \
-            --notes "$(git log -1 --pretty=%B)"
+        run: npx --yes semantic-release@24
