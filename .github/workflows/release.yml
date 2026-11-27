@@ -43,7 +43,7 @@ jobs:
         run: |
           sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$sdk" --licenses >/dev/null || true
-          pkg=$("$sdk" --list 2>/dev/null | grep -oE 'platforms;android-37[0-9.]*' | sort -uV | head -n1)
+          pkg=$("$sdk" --list 2>/dev/null | grep -oE 'platforms;android-37\.1' | sort -uV | head -n1)
           echo "platform package: ${pkg:-none (AGP will download)}"
           if [ -n "$pkg" ]; then "$sdk" "$pkg"; fi
 
