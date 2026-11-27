@@ -141,7 +141,7 @@ The host needs GCC, Make, CMake, Ninja, Meson, pkg-config, Python 3.11.4+ (with 
 
 `prepare-sources.py` verifies SHA256 pins from `SOURCES.txt` before extraction and applies the tracked patches. `--offline` uses archives already in `dl/`. `build-native.sh` compiles the gettext stub, dependencies, host Lemon, Wireshark and helpers, then copies freshly built native files into `jniLibs`. tshark is larger than 100 MB, so it is not in git.
 
-Release signing is read from an untracked properties file that the `SHARKDROID_KEYSTORE_PROPS` environment variable points to. Without that file, the release APK is left unsigned. Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds, signs (secrets `d224407` and `d224407_PASS`) and publishes the release.
+Release signing is read from an untracked properties file that the `SHARKDROID_KEYSTORE_PROPS` environment variable points to. Without that file, the release APK is left unsigned. Every push runs `.github/workflows/release.yml` (build and sign with secrets `d224407` and `d224407_PASS`); pushes to the default branch also publish release `v<versionName>`.
 
 `patches/` holds just three small patches:
 

@@ -129,7 +129,7 @@ App 在 `app-project/` 目录下，用 `gradle assembleRelease` 编译。App 使
 
 编译 App 之前先运行 `scripts/copy-jnilibs.sh`，把编译好的 tshark / dumpcap 放进 `jniLibs`。tshark 超过 100 MB，所以没有放进 git。
 
-release 签名配置从环境变量 `SHARKDROID_KEYSTORE_PROPS` 指向的一个不纳入版本控制的 properties 文件读取。没有这个文件时，release APK 不会被签名。推送 `v*` 标签会运行 `.github/workflows/release.yml`，自动构建、签名（secrets 为 `d224407` 和 `d224407_PASS`）并发布 release。
+release 签名配置从环境变量 `SHARKDROID_KEYSTORE_PROPS` 指向的一个不纳入版本控制的 properties 文件读取。没有这个文件时，release APK 不会被签名。每次 push 都会运行 `.github/workflows/release.yml`（用 secrets `d224407` 和 `d224407_PASS` 构建并签名）；推送到默认分支时还会发布 release `v<versionName>`。
 
 `patches/` 下一共只有 3 个很小的补丁：
 
