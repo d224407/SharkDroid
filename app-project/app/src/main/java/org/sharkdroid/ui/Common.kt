@@ -130,11 +130,11 @@ fun groupedShape(index: Int, count: Int): Shape {
 /** Decorative expressive shapes (cookie / burst polygons) used for icon containers. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 object SharkShapesDeco {
-    val hero: Shape @Composable get() = remember { MaterialShapes.SoftBurst.toShape() }
-    val active: Shape @Composable get() = remember { MaterialShapes.Cookie9Sided.toShape() }
-    val calm: Shape @Composable get() = remember { MaterialShapes.Cookie6Sided.toShape() }
-    val round: Shape @Composable get() = remember { MaterialShapes.Circle.toShape() }
-    val file: Shape @Composable get() = remember { MaterialShapes.Cookie12Sided.toShape() }
+    val hero: Shape @Composable get() = MaterialShapes.SoftBurst.toShape()
+    val active: Shape @Composable get() = MaterialShapes.Cookie9Sided.toShape()
+    val calm: Shape @Composable get() = MaterialShapes.Cookie6Sided.toShape()
+    val round: Shape @Composable get() = MaterialShapes.Circle.toShape()
+    val file: Shape @Composable get() = MaterialShapes.Cookie12Sided.toShape()
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
