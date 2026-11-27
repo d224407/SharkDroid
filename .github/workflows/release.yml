@@ -94,7 +94,7 @@ jobs:
           cp app-project/app/build/outputs/apk/release/app-release.apk "out/SharkDroid-${ver}.apk"
           cp SOURCES.txt out/
           (cd out && sha256sum * > SHA256SUMS)
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs out/SharkDroid-*.apk
+          "$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)" verify --print-certs out/SharkDroid-*.apk
 
       - uses: actions/upload-artifact@v5
         with:
